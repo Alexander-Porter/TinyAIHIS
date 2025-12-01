@@ -1,0 +1,50 @@
+server:
+  port: 8080
+
+spring:
+  datasource:
+    url: jdbc:h2:mem:tinyhis_test;DB_CLOSE_DELAY=-1;MODE=MYSQL
+    username: sa
+    password: 
+    driver-class-name: org.h2.Driver
+  h2:
+    console:
+      enabled: false
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:schema.sql
+      data-locations: classpath:data.sql
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration
+  ai:
+    openai:
+      api-key: ${SILICONFLOW_API_KEY:test-key}
+      base-url: https://api.siliconflow.cn/v1
+      chat:
+        options:
+          model: Qwen/Qwen2.5-7B-Instruct
+
+mybatis-plus:
+  mapper-locations: classpath:/mapper/**/*.xml
+  type-aliases-package: com.tinyhis.entity
+  configuration:
+    map-underscore-to-camel-case: true
+
+jwt:
+  secret: TinyHISSecretKeyForJWTAuthentication2024VeryLongSecretKey
+  expiration: 86400000
+
+hospital:
+  latitude: 39.9042
+  longitude: 116.4074
+  check-in-radius: 500
+
+triage:
+  rag:
+    enabled: false
+
+logging:
+  level:
+    com.tinyhis: DEBUG
