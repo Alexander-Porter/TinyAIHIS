@@ -96,7 +96,7 @@ public class RagTriageService {
         if (response.getBody() != null) {
             List<Map<String, Object>> choices = (List<Map<String, Object>>) response.getBody().get("choices");
             if (choices != null && !choices.isEmpty()) {
-                Map<String, Object> choice = choices.get(0);
+                Map<String, Object> choice = choices.getFirst();
                 Map<String, Object> messageObj = (Map<String, Object>) choice.get("message");
                 if (messageObj != null) {
                     return (String) messageObj.get("content");
@@ -138,7 +138,7 @@ public class RagTriageService {
     }
 
     private String buildPrompt(String context, String symptoms, String bodyPart) {
-        return String.format("""
+        return """
             你是一位专业的医院导诊助手。请根据以下医学知识参考和患者描述，推荐最合适的就诊科室。
             
             【医学知识参考】
@@ -152,10 +152,10 @@ public class RagTriageService {
             科室：[科室名称]
             理由：[简短理由，不超过50字]
             可能疾病：[可能的疾病名称，如有多个用逗号分隔]
-            """, 
-            context,
-            symptoms != null ? symptoms : "未提供",
-            bodyPart != null ? bodyPart : "未提供");
+            """.formatted(
+                context,
+                symptoms != null ? symptoms : "未提供",
+                bodyPart != null ? bodyPart : "未提供");
     }
 
     private TriageRecommendation parseResponse(String response, List<MedicalDocument> docs) {
@@ -191,7 +191,7 @@ public class RagTriageService {
             return "内科";
         }
         // Use the department from the most relevant document
-        return docs.get(0).getDepartment();
+        return docs.getFirst().getDepartment();
     }
 
     private Long getDeptId(String deptName) {

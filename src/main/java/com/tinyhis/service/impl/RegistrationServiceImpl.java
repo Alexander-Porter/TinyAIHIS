@@ -162,7 +162,7 @@ public class RegistrationServiceImpl implements RegistrationService {
             if (waiting.isEmpty()) {
                 throw new BusinessException("当前没有等待的患者");
             }
-            regId = waiting.get(0).getRegId();
+            regId = waiting.getFirst().getRegId();
         }
 
         Registration registration = registrationMapper.selectById(regId);
