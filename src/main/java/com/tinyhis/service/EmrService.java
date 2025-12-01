@@ -39,6 +39,11 @@ public interface EmrService {
     List<Prescription> getPrescriptionsByRecord(Long recordId);
 
     /**
+     * Get prescription details by record
+     */
+    List<com.tinyhis.dto.PrescriptionDetailDTO> getPrescriptionDetails(Long recordId);
+
+    /**
      * Get lab orders by record
      */
     List<LabOrder> getLabOrdersByRecord(Long recordId);

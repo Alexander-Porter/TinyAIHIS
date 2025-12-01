@@ -3,7 +3,7 @@
     <router-view />
     
     <!-- Bottom Navigation -->
-    <van-tabbar v-if="showTabbar" v-model="activeTab" @change="onTabChange">
+    <van-tabbar v-if="showTabbar" v-model="activeTab" @change="onTabChange" active-color="var(--primary-color)" inactive-color="var(--text-tertiary)">
       <van-tabbar-item name="home" icon="home-o">首页</van-tabbar-item>
       <van-tabbar-item name="appointment" icon="calendar-o">挂号</van-tabbar-item>
       <van-tabbar-item name="payment" icon="card">缴费</van-tabbar-item>
@@ -52,7 +52,7 @@ const onTabChange = (name) => {
 <style scoped lang="scss">
 .patient-layout {
   min-height: 100vh;
-  background: #f5f7fa;
+  background: var(--bg-body);
   padding-bottom: 50px;
 }
 </style>

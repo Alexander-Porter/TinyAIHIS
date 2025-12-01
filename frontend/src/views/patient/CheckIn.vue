@@ -3,11 +3,16 @@
     <van-nav-bar title="到院签到" left-arrow @click-left="$router.back()" />
     
     <div class="content">
-      <div class="location-section">
-        <div class="icon">📍</div>
-        <div class="status" v-if="locationStatus === 'pending'">正在获取位置...</div>
-        <div class="status" v-else-if="locationStatus === 'success'">位置已获取</div>
-        <div class="status error" v-else-if="locationStatus === 'error'">无法获取位置</div>
+      <div class="info-section">
+        <van-icon name="clock-o" size="48" color="var(--primary-color)" />
+        <div class="tips">
+          <p>签到规则</p>
+          <ul>
+            <li>就诊前 <strong>30分钟</strong> 内可签到</li>
+            <li>半天内的号无需签到，直接候诊</li>
+            <li>签到后请前往相应科室等候</li>
+          </ul>
+        </div>
       </div>
       
       <div class="reg-list">
@@ -16,22 +21,22 @@
         
         <div class="reg-item" v-for="reg in pendingRegs" :key="reg.regId">
           <div class="info">
-            <div class="dept">挂号单 #{{ reg.regId }}</div>
-            <div class="time">排队号: {{ reg.queueNumber }}</div>
+            <div class="dept">{{ reg.deptName || '未知科室' }}</div>
+            <div class="doctor">{{ reg.doctorName || '未知医生' }} · {{ reg.shift || '' }}</div>
+            <div class="time">{{ reg.scheduleDate }}</div>
           </div>
-          <van-button size="small" type="primary" :loading="checkingIn === reg.regId" @click="doCheckIn(reg)">
-            签到
-          </van-button>
+          <div class="action">
+            <div class="queue">排队号: {{ reg.queueNumber }}</div>
+            <van-button 
+              size="small" 
+              type="primary" 
+              :disabled="!canCheckIn(reg)"
+              :loading="checkingIn === reg.regId" 
+              @click="doCheckIn(reg)">
+              {{ getCheckInText(reg) }}
+            </van-button>
+          </div>
         </div>
-      </div>
-      
-      <div class="tips">
-        <div class="tip-title">签到说明</div>
-        <ul>
-          <li>请在距离医院500米范围内进行签到</li>
-          <li>签到后请前往相应科室候诊</li>
-          <li>请注意关注叫号信息</li>
-        </ul>
       </div>
     </div>
   </div>
@@ -39,19 +44,16 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import { NavBar as VanNavBar, Button as VanButton, Empty as VanEmpty, showToast } from 'vant'
+import { NavBar as VanNavBar, Button as VanButton, Empty as VanEmpty, Icon as VanIcon, showToast } from 'vant'
 import { registrationApi } from '@/utils/api'
 import { useUserStore } from '@/stores/user'
 
 const userStore = useUserStore()
-const locationStatus = ref('pending')
-const location = ref({ lat: 0, lng: 0 })
 const pendingRegs = ref([])
 const checkingIn = ref(null)
 
 onMounted(() => {
   loadPendingRegs()
-  getLocation()
 })
 
 const loadPendingRegs = async () => {
@@ -65,44 +67,62 @@ const loadPendingRegs = async () => {
   }
 }
 
-const getLocation = () => {
-  if (navigator.geolocation) {
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        location.value = {
-          lat: pos.coords.latitude,
-          lng: pos.coords.longitude
-        }
-        locationStatus.value = 'success'
-      },
-      (err) => {
-        console.error('Location error', err)
-        locationStatus.value = 'error'
-        // Use mock location for testing
-        location.value = { lat: 39.9042, lng: 116.4074 }
-      }
-    )
+// 判断是否可以签到：就诊前30分钟内，或半天内的号
+const canCheckIn = (reg) => {
+  if (!reg.scheduleDate) return true // 如果没有日期信息，允许签到
+  
+  const now = new Date()
+  const scheduleDate = new Date(reg.scheduleDate)
+  
+  // 设置预约时段的开始时间
+  if (reg.shift === '上午' || reg.shift === 'AM') {
+    scheduleDate.setHours(8, 0, 0, 0)
   } else {
-    locationStatus.value = 'error'
+    scheduleDate.setHours(14, 0, 0, 0)
   }
+  
+  const diffMinutes = (scheduleDate - now) / (1000 * 60)
+  
+  // 已过时的号也允许签到（可能迟到）
+  if (diffMinutes <= 0) {
+    return true
+  }
+  
+  // 就诊前30分钟内可以签到
+  return diffMinutes <= 30
+}
+
+const getCheckInText = (reg) => {
+  if (!reg.scheduleDate) return '签到'
+  
+  const now = new Date()
+  const scheduleDate = new Date(reg.scheduleDate)
+  
+  if (reg.shift === '上午' || reg.shift === 'AM') {
+    scheduleDate.setHours(8, 0, 0, 0)
+  } else {
+    scheduleDate.setHours(14, 0, 0, 0)
+  }
+  
+  const diffMinutes = (scheduleDate - now) / (1000 * 60)
+  
+  if (diffMinutes > 30) {
+    const mins = Math.floor(diffMinutes - 30)
+    if (mins >= 60) {
+      return `${Math.floor(mins/60)}小时后`
+    }
+    return `${mins}分钟后`
+  }
+  
+  return '签到'
 }
 
 const doCheckIn = async (reg) => {
-  if (locationStatus.value === 'pending') {
-    showToast('正在获取位置，请稍候')
-    return
-  }
-  
   checkingIn.value = reg.regId
   
   try {
-    await registrationApi.checkIn({
-      regId: reg.regId,
-      latitude: location.value.lat,
-      longitude: location.value.lng
-    })
-    
-    showToast('签到成功')
+    await registrationApi.checkIn({ regId: reg.regId })
+    showToast('签到成功，请前往科室候诊')
     
     // Remove from pending list
     const idx = pendingRegs.value.findIndex(r => r.regId === reg.regId)
@@ -120,86 +140,99 @@ const doCheckIn = async (reg) => {
 <style scoped lang="scss">
 .checkin-page {
   min-height: 100vh;
-  background: #f5f7fa;
+  background: var(--bg-body);
   
   .content {
-    padding: 15px;
+    padding: 16px;
   }
   
-  .location-section {
-    background: #fff;
-    border-radius: 12px;
-    padding: 30px;
+  .info-section {
+    background: var(--bg-surface);
+    border-radius: var(--radius-lg);
+    padding: 24px;
     text-align: center;
-    margin-bottom: 15px;
+    margin-bottom: 16px;
+    box-shadow: var(--shadow-sm);
     
-    .icon {
-      font-size: 48px;
-      margin-bottom: 10px;
-    }
-    
-    .status {
-      color: #67c23a;
+    .tips {
+      text-align: left;
+      margin-top: 16px;
+      color: var(--text-secondary);
+      font-size: 14px;
       
-      &.error {
-        color: #f56c6c;
+      p {
+        margin: 0 0 8px;
+        font-weight: 600;
+        color: var(--text-primary);
+      }
+      
+      ul {
+        margin: 0;
+        padding-left: 20px;
+        
+        li {
+          margin-bottom: 4px;
+          line-height: 1.6;
+          
+          strong {
+            color: var(--primary-color);
+          }
+        }
       }
     }
   }
   
   .reg-list {
-    background: #fff;
-    border-radius: 12px;
-    padding: 15px;
-    margin-bottom: 15px;
+    background: var(--bg-surface);
+    border-radius: var(--radius-lg);
+    padding: 16px;
+    box-shadow: var(--shadow-sm);
     
     .list-title {
       font-size: 16px;
-      font-weight: 500;
-      margin-bottom: 15px;
+      font-weight: 600;
+      margin-bottom: 16px;
+      color: var(--text-primary);
     }
     
     .reg-item {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 15px;
-      background: #f5f7fa;
-      border-radius: 8px;
-      margin-bottom: 10px;
+      padding: 16px;
+      background: var(--bg-body);
+      border-radius: var(--radius-md);
+      margin-bottom: 12px;
+      
+      &:last-child {
+        margin-bottom: 0;
+      }
       
       .info {
         .dept {
-          font-weight: 500;
+          font-weight: 600;
+          color: var(--text-primary);
+          margin-bottom: 4px;
+        }
+        .doctor {
+          font-size: 13px;
+          color: var(--text-secondary);
+          margin-bottom: 2px;
         }
         .time {
-          font-size: 13px;
-          color: #666;
-          margin-top: 5px;
+          font-size: 12px;
+          color: var(--text-tertiary);
         }
       }
-    }
-  }
-  
-  .tips {
-    background: #fff;
-    border-radius: 12px;
-    padding: 15px;
-    
-    .tip-title {
-      font-size: 14px;
-      font-weight: 500;
-      margin-bottom: 10px;
-    }
-    
-    ul {
-      margin: 0;
-      padding-left: 20px;
       
-      li {
-        font-size: 13px;
-        color: #666;
-        line-height: 1.8;
+      .action {
+        text-align: right;
+        
+        .queue {
+          font-size: 12px;
+          color: var(--text-tertiary);
+          margin-bottom: 8px;
+        }
       }
     }
   }

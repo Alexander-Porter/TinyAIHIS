@@ -1,5 +1,5 @@
 import axios from 'axios'
-import { ElMessage } from 'element-plus'
+import { message } from 'ant-design-vue'
 
 const api = axios.create({
   baseURL: '/api',
@@ -31,7 +31,7 @@ api.interceptors.response.use(
   response => {
     const res = response.data
     if (res.code !== 200) {
-      ElMessage.error(res.message || '请求失败')
+      message.error(res.message || '请求失败')
       return Promise.reject(new Error(res.message))
     }
     return res.data
@@ -42,7 +42,7 @@ api.interceptors.response.use(
       localStorage.removeItem('userInfo')
       window.location.href = '/'
     }
-    ElMessage.error(error.message || '网络错误')
+    message.error(error.message || '网络错误')
     return Promise.reject(error)
   }
 )

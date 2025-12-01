@@ -2,50 +2,42 @@
   <div class="lab-workstation">
     <div class="page-header"><h2>检验工作台</h2></div>
     
-    <el-table :data="orders" stripe>
-      <el-table-column prop="orderId" label="单号" width="80" />
-      <el-table-column prop="itemName" label="检查项目" />
-      <el-table-column prop="price" label="价格">
-        <template #default="{ row }">¥{{ row.price }}</template>
-      </el-table-column>
-      <el-table-column prop="status" label="状态">
-        <template #default="{ row }">
-          <el-tag :type="row.status === 1 ? 'warning' : 'success'">
-            {{ row.status === 1 ? '待检验' : '已完成' }}
-          </el-tag>
+    <a-table :dataSource="orders" :columns="columns" rowKey="orderId">
+      <template #bodyCell="{ column, record }">
+        <template v-if="column.key === 'price'">
+          {{ record.price }}
         </template>
-      </el-table-column>
-      <el-table-column label="操作" width="100">
-        <template #default="{ row }">
-          <el-button type="primary" text @click="showResultDialog(row)" v-if="row.status === 1">
+        <template v-if="column.key === 'status'">
+          <a-tag :color="record.status === 1 ? 'warning' : 'success'">
+            {{ record.status === 1 ? '待检验' : '已完成' }}
+          </a-tag>
+        </template>
+        <template v-if="column.key === 'action'">
+          <a-button type="link" @click="showResultDialog(record)" v-if="record.status === 1">
             录入结果
-          </el-button>
+          </a-button>
         </template>
-      </el-table-column>
-    </el-table>
+      </template>
+    </a-table>
     
     <!-- Result Dialog -->
-    <el-dialog v-model="dialogVisible" title="录入检验结果" width="600px">
-      <el-form :model="resultForm" label-width="100px">
-        <el-form-item label="检查项目">{{ currentOrder?.itemName }}</el-form-item>
-        <el-form-item label="检验结果">
-          <el-input v-model="resultForm.resultText" type="textarea" rows="6" placeholder="请输入检验结果" />
-        </el-form-item>
-        <el-form-item label="图片链接">
-          <el-input v-model="resultForm.resultImages" placeholder="图片URL，多个用逗号分隔" />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="submitResult" :loading="submitting">提交</el-button>
-      </template>
-    </el-dialog>
+    <a-modal v-model:open="dialogVisible" title="录入检验结果" @ok="submitResult" :confirmLoading="submitting">
+      <a-form :model="resultForm" :label-col="{ span: 4 }" :wrapper-col="{ span: 20 }">
+        <a-form-item label="检查项目">{{ currentOrder?.itemName }}</a-form-item>
+        <a-form-item label="检验结果">
+          <a-textarea v-model:value="resultForm.resultText" :rows="6" placeholder="请输入检验结果" />
+        </a-form-item>
+        <a-form-item label="图片链接">
+          <a-input v-model:value="resultForm.resultImages" placeholder="图片URL，多个用逗号分隔" />
+        </a-form-item>
+      </a-form>
+    </a-modal>
   </div>
 </template>
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
-import { ElMessage } from 'element-plus'
+import { message } from 'ant-design-vue'
 import { labApi } from '@/utils/api'
 
 const orders = ref([])
@@ -53,6 +45,14 @@ const dialogVisible = ref(false)
 const currentOrder = ref(null)
 const submitting = ref(false)
 const resultForm = reactive({ resultText: '', resultImages: '' })
+
+const columns = [
+  { title: '单号', dataIndex: 'orderId', key: 'orderId', width: 80 },
+  { title: '检查项目', dataIndex: 'itemName', key: 'itemName' },
+  { title: '价格', dataIndex: 'price', key: 'price' },
+  { title: '状态', dataIndex: 'status', key: 'status' },
+  { title: '操作', key: 'action', width: 100 }
+]
 
 onMounted(() => loadOrders())
 
@@ -75,7 +75,7 @@ const submitResult = async () => {
       resultText: resultForm.resultText,
       resultImages: resultForm.resultImages
     })
-    ElMessage.success('结果已提交')
+    message.success('结果已提交')
     dialogVisible.value = false
     loadOrders()
   } catch (e) { console.error(e) } finally { submitting.value = false }

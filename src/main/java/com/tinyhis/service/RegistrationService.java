@@ -27,6 +27,11 @@ public interface RegistrationService {
     List<Registration> getRegistrationsByPatient(Long patientId);
 
     /**
+     * Get registration details by patient (including dept name, doctor name, etc.)
+     */
+    List<com.tinyhis.dto.RegistrationDetailDTO> getPatientRegistrationDetails(Long patientId);
+
+    /**
      * Pay for registration (模拟缴费)
      */
     Registration payRegistration(Long regId);

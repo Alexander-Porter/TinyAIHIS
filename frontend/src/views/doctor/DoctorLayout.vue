@@ -2,24 +2,28 @@
   <div class="doctor-layout">
     <div class="sidebar" v-if="isLoggedIn">
       <div class="logo">
-        <span>🏥</span> TinyHIS
+        <div class="logo-icon"><MedicineBoxOutlined /></div>
+        <span>医生工作站</span>
       </div>
       <div class="user-info">
-        <div class="name">{{ userStore.userInfo.realName }}</div>
-        <div class="role">{{ userStore.userInfo.role === 'CHIEF' ? '科室主任' : '医生' }}</div>
+        <div class="avatar"><UserOutlined /></div>
+        <div class="info">
+          <div class="name">{{ userStore.userInfo.realName }}</div>
+          <div class="role">{{ userStore.userInfo.role === 'CHIEF' ? '科室主任' : '主治医师' }}</div>
+        </div>
       </div>
-      <el-menu :default-active="activeMenu" @select="handleMenuSelect">
-        <el-menu-item index="workstation">
-          <el-icon><Monitor /></el-icon>
+      <a-menu :selectedKeys="[activeMenu]" mode="inline" @click="handleMenuSelect">
+        <a-menu-item key="workstation">
+          <template #icon><DesktopOutlined /></template>
           <span>接诊工作台</span>
-        </el-menu-item>
-        <el-menu-item index="templates" v-if="userStore.userInfo.role === 'CHIEF'">
-          <el-icon><Document /></el-icon>
+        </a-menu-item>
+        <a-menu-item key="templates" v-if="userStore.userInfo.role === 'CHIEF'">
+          <template #icon><FileTextOutlined /></template>
           <span>模板管理</span>
-        </el-menu-item>
-      </el-menu>
+        </a-menu-item>
+      </a-menu>
       <div class="logout" @click="logout">
-        <el-icon><SwitchButton /></el-icon> 退出登录
+        <LogoutOutlined /> 退出登录
       </div>
     </div>
     <div class="main-content">
@@ -31,7 +35,7 @@
 <script setup>
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Monitor, Document, SwitchButton } from '@element-plus/icons-vue'
+import { DesktopOutlined, FileTextOutlined, LogoutOutlined, MedicineBoxOutlined, UserOutlined } from '@ant-design/icons-vue'
 import { useUserStore } from '@/stores/user'
 
 const route = useRoute()
@@ -45,8 +49,8 @@ const activeMenu = computed(() => {
   return 'workstation'
 })
 
-const handleMenuSelect = (key) => {
-  router.push(`/doctor/${key}`)
+const handleMenuSelect = ({ key }) => {
+  router.push(/doctor/)
 }
 
 const logout = () => {
@@ -59,69 +63,114 @@ const logout = () => {
 .doctor-layout {
   display: flex;
   height: 100vh;
+  background-color: var(--bg-body);
   
   .sidebar {
-    width: 220px;
-    background: #304156;
+    width: 260px;
+    background: var(--bg-surface);
+    border-right: 1px solid var(--border-color);
     display: flex;
     flex-direction: column;
+    box-shadow: var(--shadow-sm);
+    z-index: 10;
     
     .logo {
-      height: 60px;
+      height: 80px;
       display: flex;
       align-items: center;
-      justify-content: center;
-      color: #fff;
-      font-size: 20px;
-      font-weight: bold;
+      padding: 0 24px;
+      color: var(--text-primary);
+      font-size: 1.125rem;
+      font-weight: 600;
+      border-bottom: 1px solid var(--border-color);
       
-      span {
-        margin-right: 8px;
+      .logo-icon {
+        width: 32px;
+        height: 32px;
+        background: var(--primary-color);
+        color: #fff;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-right: 12px;
       }
     }
     
     .user-info {
-      padding: 15px 20px;
-      border-bottom: 1px solid rgba(255,255,255,0.1);
-      color: #fff;
+      padding: 24px;
+      display: flex;
+      align-items: center;
+      border-bottom: 1px solid var(--border-color);
       
-      .name {
-        font-size: 16px;
-        font-weight: 500;
+      .avatar {
+        width: 48px;
+        height: 48px;
+        background: var(--bg-body);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--text-secondary);
+        font-size: 1.25rem;
+        margin-right: 16px;
       }
       
-      .role {
-        font-size: 12px;
-        opacity: 0.7;
-        margin-top: 5px;
+      .info {
+        .name {
+          font-weight: 600;
+          color: var(--text-primary);
+          margin-bottom: 4px;
+        }
+        
+        .role {
+          font-size: 0.75rem;
+          color: var(--text-secondary);
+          background: var(--bg-body);
+          padding: 2px 8px;
+          border-radius: 10px;
+          display: inline-block;
+        }
       }
     }
     
-    .el-menu {
+    :deep(.ant-menu) {
       flex: 1;
       border: none;
       background: transparent;
+      padding: 16px 0;
       
-      .el-menu-item {
-        color: rgba(255,255,255,0.8);
+      .ant-menu-item {
+        height: 50px;
+        line-height: 50px;
+        margin: 4px 16px;
+        border-radius: var(--radius-md);
+        color: var(--text-secondary);
         
-        &:hover, &.is-active {
-          background: rgba(255,255,255,0.1);
-          color: #fff;
+        &:hover {
+          background: var(--bg-body);
+          color: var(--text-primary);
+        }
+        
+        &.ant-menu-item-selected {
+          background: rgba(0, 102, 204, 0.1);
+          color: var(--accent-color);
+          font-weight: 500;
         }
       }
     }
     
     .logout {
-      padding: 15px 20px;
-      color: rgba(255,255,255,0.6);
+      padding: 20px;
       cursor: pointer;
+      color: var(--text-secondary);
+      border-top: 1px solid var(--border-color);
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: 10px;
       
       &:hover {
-        color: #fff;
+        color: var(--error-color);
       }
     }
   }
@@ -129,7 +178,7 @@ const logout = () => {
   .main-content {
     flex: 1;
     overflow: auto;
-    background: #f5f7fa;
+    background: var(--bg-body);
   }
 }
 </style>

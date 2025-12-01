@@ -2,63 +2,49 @@
   <div class="inventory-page">
     <div class="page-header">
       <h2>库存管理</h2>
-      <el-button type="primary" @click="showAddDialog">新增药品</el-button>
+      <a-button type="primary" @click="showAddDialog">新增药品</a-button>
     </div>
     
-    <el-table :data="drugs" stripe>
-      <el-table-column prop="drugId" label="ID" width="60" />
-      <el-table-column prop="name" label="药品名称" />
-      <el-table-column prop="spec" label="规格" />
-      <el-table-column prop="price" label="单价">
-        <template #default="{ row }">¥{{ row.price }}</template>
-      </el-table-column>
-      <el-table-column prop="stockQuantity" label="库存">
-        <template #default="{ row }">
-          <el-tag :type="row.stockQuantity < 100 ? 'danger' : 'success'">{{ row.stockQuantity }}</el-tag>
+    <a-table :dataSource="drugs" :columns="columns" rowKey="drugId">
+      <template #bodyCell="{ column, record }">
+        <template v-if="column.key === 'price'">
+          ¥{{ record.price }}
         </template>
-      </el-table-column>
-      <el-table-column prop="unit" label="单位" width="80" />
-      <el-table-column label="操作" width="100">
-        <template #default="{ row }">
-          <el-button type="primary" text @click="showStockDialog(row)">入库</el-button>
+        <template v-if="column.key === 'stockQuantity'">
+          <a-tag :color="record.stockQuantity < 100 ? 'error' : 'success'">{{ record.stockQuantity }}</a-tag>
         </template>
-      </el-table-column>
-    </el-table>
+        <template v-if="column.key === 'action'">
+          <a-button type="link" @click="showStockDialog(record)">入库</a-button>
+        </template>
+      </template>
+    </a-table>
     
     <!-- Add Drug Dialog -->
-    <el-dialog v-model="addDialogVisible" title="新增药品" width="500px">
-      <el-form :model="drugForm" label-width="80px">
-        <el-form-item label="名称"><el-input v-model="drugForm.name" /></el-form-item>
-        <el-form-item label="规格"><el-input v-model="drugForm.spec" /></el-form-item>
-        <el-form-item label="单价"><el-input-number v-model="drugForm.price" :min="0" :precision="2" /></el-form-item>
-        <el-form-item label="库存"><el-input-number v-model="drugForm.stockQuantity" :min="0" /></el-form-item>
-        <el-form-item label="单位"><el-input v-model="drugForm.unit" /></el-form-item>
-        <el-form-item label="厂家"><el-input v-model="drugForm.manufacturer" /></el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="addDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="addDrug">保存</el-button>
-      </template>
-    </el-dialog>
+    <a-modal v-model:open="addDialogVisible" title="新增药品" @ok="addDrug">
+      <a-form :model="drugForm" :label-col="{ span: 4 }" :wrapper-col="{ span: 20 }">
+        <a-form-item label="名称"><a-input v-model:value="drugForm.name" /></a-form-item>
+        <a-form-item label="规格"><a-input v-model:value="drugForm.spec" /></a-form-item>
+        <a-form-item label="单价"><a-input-number v-model:value="drugForm.price" :min="0" :precision="2" style="width: 100%" /></a-form-item>
+        <a-form-item label="库存"><a-input-number v-model:value="drugForm.stockQuantity" :min="0" style="width: 100%" /></a-form-item>
+        <a-form-item label="单位"><a-input v-model:value="drugForm.unit" /></a-form-item>
+        <a-form-item label="厂家"><a-input v-model:value="drugForm.manufacturer" /></a-form-item>
+      </a-form>
+    </a-modal>
     
     <!-- Stock Dialog -->
-    <el-dialog v-model="stockDialogVisible" title="入库" width="400px">
-      <el-form label-width="80px">
-        <el-form-item label="药品">{{ currentDrug?.name }}</el-form-item>
-        <el-form-item label="当前库存">{{ currentDrug?.stockQuantity }}</el-form-item>
-        <el-form-item label="入库数量"><el-input-number v-model="stockQuantity" :min="1" /></el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="stockDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="updateStock">确定</el-button>
-      </template>
-    </el-dialog>
+    <a-modal v-model:open="stockDialogVisible" title="入库" @ok="updateStock">
+      <a-form :label-col="{ span: 6 }" :wrapper-col="{ span: 18 }">
+        <a-form-item label="药品">{{ currentDrug?.name }}</a-form-item>
+        <a-form-item label="当前库存">{{ currentDrug?.stockQuantity }}</a-form-item>
+        <a-form-item label="入库数量"><a-input-number v-model:value="stockQuantity" :min="1" style="width: 100%" /></a-form-item>
+      </a-form>
+    </a-modal>
   </div>
 </template>
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
-import { ElMessage } from 'element-plus'
+import { message } from 'ant-design-vue'
 import { pharmacyApi } from '@/utils/api'
 
 const drugs = ref([])
@@ -68,6 +54,16 @@ const currentDrug = ref(null)
 const stockQuantity = ref(100)
 
 const drugForm = reactive({ name: '', spec: '', price: 0, stockQuantity: 0, unit: '', manufacturer: '' })
+
+const columns = [
+  { title: 'ID', dataIndex: 'drugId', key: 'drugId', width: 60 },
+  { title: '药品名称', dataIndex: 'name', key: 'name' },
+  { title: '规格', dataIndex: 'spec', key: 'spec' },
+  { title: '单价', dataIndex: 'price', key: 'price' },
+  { title: '库存', dataIndex: 'stockQuantity', key: 'stockQuantity' },
+  { title: '单位', dataIndex: 'unit', key: 'unit', width: 80 },
+  { title: '操作', key: 'action', width: 100 }
+]
 
 onMounted(() => loadDrugs())
 
@@ -83,7 +79,7 @@ const showAddDialog = () => {
 const addDrug = async () => {
   try {
     await pharmacyApi.addDrug(drugForm)
-    ElMessage.success('添加成功')
+    message.success('添加成功')
     addDialogVisible.value = false
     loadDrugs()
   } catch (e) { console.error(e) }
@@ -98,13 +94,18 @@ const showStockDialog = (drug) => {
 const updateStock = async () => {
   try {
     await pharmacyApi.updateStock(currentDrug.value.drugId, stockQuantity.value)
-    ElMessage.success('入库成功')
+    message.success('入库成功')
     stockDialogVisible.value = false
     loadDrugs()
   } catch (e) { console.error(e) }
 }
 </script>
 
-<style scoped lang="scss">
-.inventory-page { padding: 20px; .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; h2 { margin: 0; } } }
+<style scoped>
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
 </style>

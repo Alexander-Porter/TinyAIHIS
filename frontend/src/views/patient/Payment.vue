@@ -92,8 +92,8 @@ const loadPaymentItems = async () => {
               pendingItems.value.push({
                 id: `pres-${pres.presId}`,
                 type: '药费',
-                desc: `处方 #${pres.presId}`,
-                amount: 50, // TODO: calculate from drug price
+                desc: `${pres.drugName || '药品'} x${pres.quantity}`,
+                amount: pres.totalPrice || 0,
                 payType: 'prescription',
                 payId: record.recordId
               })
@@ -101,8 +101,8 @@ const loadPaymentItems = async () => {
               paidItems.value.push({
                 id: `pres-${pres.presId}`,
                 type: '药费',
-                desc: `处方 #${pres.presId}`,
-                amount: 50
+                desc: `${pres.drugName || '药品'} x${pres.quantity}`,
+                amount: pres.totalPrice || 0
               })
             }
           }

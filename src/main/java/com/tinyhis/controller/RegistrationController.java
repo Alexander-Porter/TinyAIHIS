@@ -41,8 +41,8 @@ public class RegistrationController {
      * Get registrations by patient
      */
     @GetMapping("/patient/{patientId}")
-    public Result<List<Registration>> getPatientRegistrations(@PathVariable Long patientId) {
-        List<Registration> registrations = registrationService.getRegistrationsByPatient(patientId);
+    public Result<List<RegistrationDetailDTO>> getPatientRegistrations(@PathVariable Long patientId) {
+        List<RegistrationDetailDTO> registrations = registrationService.getPatientRegistrationDetails(patientId);
         return Result.success(registrations);
     }
 

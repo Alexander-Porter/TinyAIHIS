@@ -1,11 +1,27 @@
 <template>
   <div class="appointment-page">
-    <van-nav-bar title="预约挂号" left-arrow @click-left="$router.back()" />
+    <van-nav-bar title="预约挂号" left-arrow @click-left="goBack" />
     
     <div class="content">
-      <!-- Step 1: Select Department -->
+      <!-- Step 1: Select Date -->
       <div class="step" v-if="step === 1">
-        <div class="step-title">选择科室</div>
+        <div class="step-title">选择日期</div>
+        <div class="date-grid">
+          <div 
+            class="date-item" 
+            v-for="date in dates" 
+            :key="date.value"
+            :class="{ active: selectedDate === date.value }"
+            @click="selectDate(date.value)">
+            <div class="week">{{ date.week }}</div>
+            <div class="day">{{ date.day }}</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 2: Select Department -->
+      <div class="step" v-if="step === 2">
+        <div class="step-title">选择科室 ({{ formatDate(selectedDate) }})</div>
         <div class="dept-grid">
           <div 
             class="dept-item" 
@@ -16,15 +32,18 @@
             {{ dept.deptName }}
           </div>
         </div>
-        <div class="btn-group" v-if="selectedDept">
-          <van-button type="primary" block @click="step = 2">下一步</van-button>
+        <div class="btn-group">
+          <van-button plain @click="step = 1">上一步</van-button>
         </div>
       </div>
       
-      <!-- Step 2: Select Schedule -->
-      <div class="step" v-if="step === 2">
-        <div class="step-title">选择医生和时间</div>
+      <!-- Step 3: Select Schedule -->
+      <div class="step" v-if="step === 3">
+        <div class="step-title">选择医生</div>
         <div class="schedule-list">
+          <div v-if="schedules.length === 0" class="empty-schedule">
+            该科室当日暂无排班
+          </div>
           <div 
             class="schedule-item" 
             v-for="s in schedules" 
@@ -32,7 +51,7 @@
             :class="{ active: selectedSchedule?.scheduleId === s.scheduleId, disabled: s.quotaLeft <= 0 }"
             @click="selectSchedule(s)">
             <div class="doctor">{{ s.doctorName }}</div>
-            <div class="time">{{ s.date }} {{ s.shift === 'AM' ? '上午' : '下午' }}</div>
+            <div class="time">{{ s.shift === 'AM' ? '上午' : '下午' }}</div>
             <div class="quota" :class="{ warning: s.quotaLeft < 5 }">
               余号: {{ s.quotaLeft }}
             </div>
@@ -40,26 +59,28 @@
           </div>
         </div>
         <div class="btn-group">
-          <van-button plain @click="step = 1">上一步</van-button>
+          <van-button plain @click="step = 2">上一步</van-button>
           <van-button type="primary" :disabled="!selectedSchedule" @click="confirmAppointment">
             确认挂号
           </van-button>
         </div>
       </div>
       
-      <!-- Step 3: Success -->
-      <div class="step success-step" v-if="step === 3">
+      <!-- Step 4: Success -->
+      <div class="step success-step" v-if="step === 4">
         <div class="success-icon">✅</div>
-        <div class="success-title">挂号成功</div>
+        <div class="success-title">预约成功，请缴费</div>
         <div class="success-info">
+          <p>日期：{{ formatDate(selectedDate) }}</p>
           <p>科室：{{ selectedDept?.deptName }}</p>
           <p>医生：{{ selectedSchedule?.doctorName }}</p>
-          <p>时间：{{ selectedSchedule?.date }} {{ selectedSchedule?.shift === 'AM' ? '上午' : '下午' }}</p>
+          <p>时间：{{ selectedSchedule?.shift === 'AM' ? '上午' : '下午' }}</p>
           <p>挂号费：¥{{ selectedSchedule?.fee }}</p>
+          <p style="color: #f56c6c; font-weight: bold; margin-top: 10px">请立即完成支付，否则无法签到就诊</p>
         </div>
         <div class="btn-group">
-          <van-button type="primary" block @click="goPayment">去缴费</van-button>
-          <van-button block @click="$router.push('/patient/home')">返回首页</van-button>
+          <van-button type="primary" block @click="goPayment">立即缴费</van-button>
+          <van-button block @click="$router.push('/patient/home')">稍后缴费</van-button>
         </div>
       </div>
     </div>
@@ -67,7 +88,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, watch } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { NavBar as VanNavBar, Button as VanButton, showToast, showLoadingToast, closeToast } from 'vant'
 import { scheduleApi, registrationApi } from '@/utils/api'
@@ -80,39 +101,50 @@ const userStore = useUserStore()
 const step = ref(1)
 const departments = ref([])
 const schedules = ref([])
+const selectedDate = ref(null)
 const selectedDept = ref(null)
 const selectedSchedule = ref(null)
 const newRegId = ref(null)
 
+const dates = computed(() => {
+  const list = []
+  const weeks = ['日', '一', '二', '三', '四', '五', '六']
+  for (let i = 0; i < 7; i++) {
+    const d = new Date()
+    d.setDate(d.getDate() + i)
+    list.push({
+      value: d.toISOString().split('T')[0],
+      day: d.getDate(),
+      week: i === 0 ? '今天' : '周' + weeks[d.getDay()]
+    })
+  }
+  return list
+})
+
 onMounted(async () => {
   try {
     departments.value = await scheduleApi.getDepartments()
-    
-    // Pre-select department if passed from triage
-    if (route.query.deptId) {
-      const dept = departments.value.find(d => d.deptId == route.query.deptId)
-      if (dept) {
-        selectDept(dept)
-        step.value = 2
-      }
-    }
   } catch (e) {
     console.error('Failed to load departments', e)
   }
 })
 
+const selectDate = (date) => {
+  selectedDate.value = date
+  step.value = 2
+}
+
 const selectDept = async (dept) => {
   selectedDept.value = dept
   selectedSchedule.value = null
+  step.value = 3
   
-  // Load schedules for this department
-  const today = new Date().toISOString().split('T')[0]
-  const nextWeek = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
-  
+  // Load schedules for this department and date
   try {
-    schedules.value = await scheduleApi.getScheduleList(dept.deptId, today, nextWeek)
+    schedules.value = await scheduleApi.getScheduleList(dept.deptId, selectedDate.value, selectedDate.value)
   } catch (e) {
     console.error('Failed to load schedules', e)
+    schedules.value = []
   }
 }
 
@@ -142,7 +174,7 @@ const confirmAppointment = async () => {
     newRegId.value = result.regId
     closeToast()
     showToast('挂号成功')
-    step.value = 3
+    step.value = 4
   } catch (e) {
     closeToast()
     console.error('Appointment failed', e)
@@ -154,6 +186,19 @@ const goPayment = () => {
     path: '/patient/payment',
     query: { regId: newRegId.value }
   })
+}
+
+const goBack = () => {
+  if (step.value > 1) {
+    step.value--
+  } else {
+    router.back()
+  }
+}
+
+const formatDate = (str) => {
+  if (!str) return ''
+  return new Date(str).toLocaleDateString()
 }
 </script>
 
@@ -170,6 +215,30 @@ const goPayment = () => {
     font-size: 16px;
     font-weight: 500;
     margin-bottom: 15px;
+  }
+
+  .date-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+
+    .date-item {
+      background: #fff;
+      border: 2px solid #eee;
+      border-radius: 8px;
+      padding: 10px;
+      text-align: center;
+      cursor: pointer;
+      
+      &.active {
+        border-color: #409eff;
+        background: #ecf5ff;
+        color: #409eff;
+      }
+
+      .week { font-size: 12px; color: #666; margin-bottom: 5px; }
+      .day { font-size: 18px; font-weight: bold; }
+    }
   }
   
   .dept-grid {
@@ -195,6 +264,12 @@ const goPayment = () => {
   }
   
   .schedule-list {
+    .empty-schedule {
+      text-align: center;
+      color: #999;
+      padding: 30px 0;
+    }
+
     .schedule-item {
       background: #fff;
       border: 2px solid #eee;

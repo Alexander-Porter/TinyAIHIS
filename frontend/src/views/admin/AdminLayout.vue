@@ -1,15 +1,18 @@
 <template>
   <div class="admin-layout">
     <div class="sidebar" v-if="isLoggedIn">
-      <div class="logo"><span>⚙️</span> 管理后台</div>
-      <el-menu :default-active="activeMenu" @select="handleMenuSelect">
-        <el-menu-item index="dashboard"><el-icon><DataAnalysis /></el-icon><span>仪表盘</span></el-menu-item>
-        <el-menu-item index="users"><el-icon><User /></el-icon><span>用户管理</span></el-menu-item>
-        <el-menu-item index="departments"><el-icon><OfficeBuilding /></el-icon><span>科室管理</span></el-menu-item>
-        <el-menu-item index="schedules"><el-icon><Calendar /></el-icon><span>排班管理</span></el-menu-item>
-        <el-menu-item index="audit"><el-icon><Document /></el-icon><span>审计日志</span></el-menu-item>
-      </el-menu>
-      <div class="logout" @click="logout"><el-icon><SwitchButton /></el-icon> 退出登录</div>
+      <div class="logo">
+        <div class="logo-icon"><SettingOutlined /></div>
+        <span>管理后台</span>
+      </div>
+      <a-menu :selectedKeys="[activeMenu]" mode="inline" @click="handleMenuSelect">
+        <a-menu-item key="dashboard"><template #icon><DashboardOutlined /></template><span>仪表盘</span></a-menu-item>
+        <a-menu-item key="users"><template #icon><UserOutlined /></template><span>用户管理</span></a-menu-item>
+        <a-menu-item key="departments"><template #icon><BankOutlined /></template><span>科室管理</span></a-menu-item>
+        <a-menu-item key="schedules"><template #icon><CalendarOutlined /></template><span>排班管理</span></a-menu-item>
+        <a-menu-item key="audit"><template #icon><FileTextOutlined /></template><span>审计日志</span></a-menu-item>
+      </a-menu>
+      <div class="logout" @click="logout"><LogoutOutlined /> 退出登录</div>
     </div>
     <div class="main-content"><router-view /></div>
   </div>
@@ -18,7 +21,7 @@
 <script setup>
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { DataAnalysis, User, OfficeBuilding, Calendar, Document, SwitchButton } from '@element-plus/icons-vue'
+import { DashboardOutlined, UserOutlined, BankOutlined, CalendarOutlined, FileTextOutlined, LogoutOutlined, SettingOutlined } from '@ant-design/icons-vue'
 import { useUserStore } from '@/stores/user'
 
 const route = useRoute()
@@ -29,7 +32,7 @@ const activeMenu = computed(() => {
   const map = { 'Dashboard': 'dashboard', 'Users': 'users', 'Departments': 'departments', 'Schedules': 'schedules', 'Audit': 'audit' }
   return map[route.name] || 'dashboard'
 })
-const handleMenuSelect = (key) => router.push(`/admin/${key}`)
+const handleMenuSelect = ({ key }) => router.push(/admin/)
 const logout = () => { userStore.logout(); router.push('/admin/login') }
 </script>
 
@@ -37,15 +40,83 @@ const logout = () => { userStore.logout(); router.push('/admin/login') }
 .admin-layout {
   display: flex;
   height: 100vh;
+  background-color: var(--bg-body);
+
   .sidebar {
-    width: 220px;
-    background: #304156;
+    width: 260px;
+    background: var(--bg-surface);
+    border-right: 1px solid var(--border-color);
     display: flex;
     flex-direction: column;
-    .logo { height: 60px; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 18px; font-weight: bold; span { margin-right: 8px; } }
-    .el-menu { flex: 1; border: none; background: transparent; .el-menu-item { color: rgba(255,255,255,0.8); &:hover, &.is-active { background: rgba(255,255,255,0.1); color: #fff; } } }
-    .logout { padding: 15px 20px; color: rgba(255,255,255,0.6); cursor: pointer; display: flex; align-items: center; gap: 8px; &:hover { color: #fff; } }
+    box-shadow: var(--shadow-sm);
+    z-index: 10;
+
+    .logo { 
+      height: 80px; 
+      display: flex; 
+      align-items: center; 
+      padding: 0 24px;
+      color: var(--text-primary); 
+      font-size: 1.125rem; 
+      font-weight: 600; 
+      border-bottom: 1px solid var(--border-color);
+      
+      .logo-icon {
+        width: 32px;
+        height: 32px;
+        background: var(--primary-color);
+        color: #fff;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-right: 12px;
+      }
+    }
+
+    :deep(.ant-menu) { 
+      flex: 1; 
+      border: none; 
+      background: transparent; 
+      padding: 16px 0;
+      
+      .ant-menu-item { 
+        height: 50px;
+        line-height: 50px;
+        margin: 4px 16px;
+        border-radius: var(--radius-md);
+        color: var(--text-secondary); 
+        
+        &:hover { 
+          background: var(--bg-body); 
+          color: var(--text-primary); 
+        }
+        
+        &.ant-menu-item-selected { 
+          background: rgba(0, 102, 204, 0.1); 
+          color: var(--accent-color); 
+          font-weight: 500;
+        }
+      } 
+    }
+
+    .logout { 
+      padding: 20px; 
+      cursor: pointer; 
+      color: var(--text-secondary); 
+      border-top: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      
+      &:hover { color: var(--error-color); } 
+    }
   }
-  .main-content { flex: 1; overflow: auto; background: #f5f7fa; }
+
+  .main-content { 
+    flex: 1; 
+    overflow: auto; 
+    background: var(--bg-body);
+  }
 }
 </style>

@@ -1,6 +1,7 @@
 package com.tinyhis.controller;
 
 import com.tinyhis.dto.EmrRequest;
+import com.tinyhis.dto.PrescriptionDetailDTO;
 import com.tinyhis.dto.Result;
 import com.tinyhis.entity.*;
 import com.tinyhis.service.EmrService;
@@ -61,8 +62,8 @@ public class EmrController {
      * Get prescriptions by record
      */
     @GetMapping("/prescriptions/{recordId}")
-    public Result<List<Prescription>> getPrescriptions(@PathVariable Long recordId) {
-        List<Prescription> prescriptions = emrService.getPrescriptionsByRecord(recordId);
+    public Result<List<PrescriptionDetailDTO>> getPrescriptions(@PathVariable Long recordId) {
+        List<PrescriptionDetailDTO> prescriptions = emrService.getPrescriptionDetails(recordId);
         return Result.success(prescriptions);
     }
 

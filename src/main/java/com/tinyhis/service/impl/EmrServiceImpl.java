@@ -2,16 +2,20 @@ package com.tinyhis.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.tinyhis.dto.EmrRequest;
+import com.tinyhis.dto.PrescriptionDetailDTO;
 import com.tinyhis.entity.*;
 import com.tinyhis.exception.BusinessException;
 import com.tinyhis.mapper.*;
 import com.tinyhis.service.EmrService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * EMR Service Implementation
@@ -25,6 +29,7 @@ public class EmrServiceImpl implements EmrService {
     private final LabOrderMapper labOrderMapper;
     private final EmrTemplateMapper emrTemplateMapper;
     private final RegistrationMapper registrationMapper;
+    private final DrugDictMapper drugDictMapper;
 
     @Override
     @Transactional
@@ -106,6 +111,24 @@ public class EmrServiceImpl implements EmrService {
         LambdaQueryWrapper<Prescription> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(Prescription::getRecordId, recordId);
         return prescriptionMapper.selectList(wrapper);
+    }
+
+    @Override
+    public List<PrescriptionDetailDTO> getPrescriptionDetails(Long recordId) {
+        List<Prescription> list = getPrescriptionsByRecord(recordId);
+        return list.stream().map(p -> {
+            PrescriptionDetailDTO dto = new PrescriptionDetailDTO();
+            BeanUtils.copyProperties(p, dto);
+            
+            DrugDict drug = drugDictMapper.selectById(p.getDrugId());
+            if (drug != null) {
+                dto.setDrugName(drug.getName());
+                dto.setDrugSpec(drug.getSpec());
+                dto.setUnitPrice(drug.getPrice());
+                dto.setTotalPrice(drug.getPrice().multiply(new BigDecimal(p.getQuantity())));
+            }
+            return dto;
+        }).collect(Collectors.toList());
     }
 
     @Override

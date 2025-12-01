@@ -2,51 +2,59 @@
   <div class="templates-page">
     <div class="page-header">
       <h2>模板管理</h2>
-      <el-button type="primary" @click="showAddDialog">新增模板</el-button>
+      <a-button type="primary" @click="showAddDialog">新增模板</a-button>
     </div>
     
-    <el-table :data="templates" stripe>
-      <el-table-column prop="name" label="模板名称" />
-      <el-table-column prop="type" label="类型">
-        <template #default="{ row }">
-          {{ row.type === 'EMR' ? '病历模板' : '处方套餐' }}
+    <a-table :dataSource="templates" :columns="columns" rowKey="tplId">
+      <template #bodyCell="{ column, record }">
+        <template v-if="column.key === 'type'">
+          {{ record.type === 'EMR' ? '病历模板' : '处方套餐' }}
         </template>
-      </el-table-column>
-      <el-table-column label="操作" width="150">
-        <template #default="{ row }">
-          <el-button type="primary" text @click="editTemplate(row)">编辑</el-button>
-          <el-button type="danger" text @click="deleteTemplate(row)">删除</el-button>
+        <template v-if="column.key === 'action'">
+          <a-button type="link" @click="editTemplate(record)">编辑</a-button>
+          <a-button type="link" danger @click="deleteTemplate(record)">删除</a-button>
         </template>
-      </el-table-column>
-    </el-table>
+      </template>
+    </a-table>
     
     <!-- Add/Edit Dialog -->
-    <el-dialog v-model="dialogVisible" :title="isEdit ? '编辑模板' : '新增模板'" width="600px">
-      <el-form :model="form" label-width="100px">
-        <el-form-item label="模板名称">
-          <el-input v-model="form.name" placeholder="请输入模板名称" />
+    <a-modal v-model:open="dialogVisible" :title="isEdit ? '编辑模板' : '新增模板'" @ok="saveTemplate" :confirmLoading="saving">
+      <a-form :model="form" :label-col="{ span: 4 }" :wrapper-col="{ span: 20 }">
+        <a-form-item label="模板名称">
+          <a-input v-model:value="form.name" placeholder="请输入模板名称" />
         </el-form-item>
-        <el-form-item label="模板类型">
-          <el-select v-model="form.type" style="width: 100%">
-            <el-option label="病历模板" value="EMR" />
-            <el-option label="处方套餐" value="PRESCRIPTION" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="模板内容">
-          <el-input v-model="form.content" type="textarea" rows="8" placeholder="请输入模板内容" />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="saveTemplate" :loading="saving">保存</el-button>
-      </template>
-    </el-dialog>
+        <a-form-item label="模板类型">
+          <a-select v-model:value="form.type" style="width: 100%">
+            <a-select-option value="EMR">病历模板</a-select-option>
+            <a-select-option value="PRESCRIPTION">处方套餐</a-select-option>
+          </a-select>
+        </a-form-item>
+        
+        <template v-if="form.type === 'EMR'">
+          <a-form-item label="主诉">
+            <a-textarea v-model:value="emrContent.symptom" :rows="2" placeholder="主诉" />
+          </a-form-item>
+          <a-form-item label="诊断">
+            <a-input v-model:value="emrContent.diagnosis" placeholder="诊断" />
+          </a-form-item>
+          <a-form-item label="病历详情">
+            <a-textarea v-model:value="emrContent.content" :rows="6" placeholder="详细病历内容" />
+          </a-form-item>
+        </template>
+        
+        <template v-else>
+          <a-form-item label="模板内容">
+            <a-textarea v-model:value="form.content" :rows="8" placeholder="请输入模板内容" />
+          </a-form-item>
+        </template>
+      </a-form>
+    </a-modal>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ref, reactive, onMounted, watch } from 'vue'
+import { message, Modal } from 'ant-design-vue'
 import { emrApi } from '@/utils/api'
 import { useUserStore } from '@/stores/user'
 
@@ -64,6 +72,18 @@ const form = reactive({
   deptId: userStore.userInfo.deptId,
   creatorId: userStore.userId
 })
+
+const emrContent = reactive({
+  symptom: '',
+  diagnosis: '',
+  content: ''
+})
+
+const columns = [
+  { title: '模板名称', dataIndex: 'name', key: 'name' },
+  { title: '类型', dataIndex: 'type', key: 'type' },
+  { title: '操作', key: 'action', width: 150 }
+]
 
 onMounted(() => {
   loadTemplates()
@@ -83,43 +103,64 @@ const showAddDialog = () => {
   form.name = ''
   form.type = 'EMR'
   form.content = ''
+  emrContent.symptom = ''
+  emrContent.diagnosis = ''
+  emrContent.content = ''
   dialogVisible.value = true
 }
 
-const editTemplate = (tpl) => {
+const editTemplate = (row) => {
   isEdit.value = true
-  form.tplId = tpl.tplId
-  form.name = tpl.name
-  form.type = tpl.type
-  form.content = tpl.content
+  form.tplId = row.tplId
+  form.name = row.name
+  form.type = row.type
+  form.content = row.content
+  
+  if (row.type === 'EMR') {
+    try {
+      const parsed = JSON.parse(row.content)
+      emrContent.symptom = parsed.symptom || ''
+      emrContent.diagnosis = parsed.diagnosis || ''
+      emrContent.content = parsed.content || ''
+    } catch (e) {
+      emrContent.content = row.content
+    }
+  }
+  
   dialogVisible.value = true
+}
+
+const deleteTemplate = (row) => {
+  Modal.confirm({
+    title: '确认删除',
+    content: '确定要删除这个模板吗？',
+    onOk: async () => {
+      try {
+        await emrApi.deleteTemplate(row.tplId)
+        message.success('删除成功')
+        loadTemplates()
+      } catch (e) {
+        console.error(e)
+      }
+    }
+  })
 }
 
 const saveTemplate = async () => {
   saving.value = true
   try {
-    await emrApi.saveTemplate({
-      ...form
-    })
-    ElMessage.success('保存成功')
+    if (form.type === 'EMR') {
+      form.content = JSON.stringify(emrContent)
+    }
+    
+    await emrApi.saveTemplate(form)
+    message.success('保存成功')
     dialogVisible.value = false
     loadTemplates()
   } catch (e) {
-    console.error('Save template failed', e)
+    console.error(e)
   } finally {
     saving.value = false
-  }
-}
-
-const deleteTemplate = async (tpl) => {
-  await ElMessageBox.confirm('确定删除该模板?', '提示', { type: 'warning' })
-  
-  try {
-    await emrApi.deleteTemplate(tpl.tplId)
-    ElMessage.success('删除成功')
-    loadTemplates()
-  } catch (e) {
-    console.error('Delete template failed', e)
   }
 }
 </script>

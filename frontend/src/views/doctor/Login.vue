@@ -1,27 +1,24 @@
 <template>
   <div class="doctor-login">
     <div class="login-box">
-      <div class="logo">🏥</div>
+      <div class="logo"></div>
       <h1>医生工作站</h1>
-      <p>TinyHIS Hospital Information System</p>
-      
-      <el-form :model="form" :rules="rules" ref="formRef" @submit.prevent="onSubmit">
-        <el-form-item prop="username">
-          <el-input v-model="form.username" placeholder="请输入用户名" prefix-icon="User" size="large" />
-        </el-form-item>
-        <el-form-item prop="password">
-          <el-input v-model="form.password" type="password" placeholder="请输入密码" prefix-icon="Lock" size="large" show-password />
-        </el-form-item>
-        <el-form-item>
-          <el-button type="primary" native-type="submit" :loading="loading" size="large" style="width: 100%">
-            登录
-          </el-button>
-        </el-form-item>
-      </el-form>
-      
-      <div class="back-link">
-        <a @click="$router.push('/')">返回首页</a>
-      </div>
+      <a-form :model="form" @finish="onSubmit">
+        <a-form-item>
+          <a-input v-model:value="form.username" placeholder="用户名" size="large">
+            <template #prefix><UserOutlined /></template>
+          </a-input>
+        </a-form-item>
+        <a-form-item>
+          <a-input-password v-model:value="form.password" placeholder="密码" size="large">
+            <template #prefix><LockOutlined /></template>
+          </a-input-password>
+        </a-form-item>
+        <a-form-item>
+          <a-button type="primary" html-type="submit" :loading="loading" size="large" style="width: 100%">登录</a-button>
+        </a-form-item>
+      </a-form>
+      <div class="back-link"><a @click="router.push('/')">返回首页</a></div>
     </div>
   </div>
 </template>
@@ -29,46 +26,24 @@
 <script setup>
 import { ref, reactive } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { message } from 'ant-design-vue'
+import { UserOutlined, LockOutlined } from '@ant-design/icons-vue'
 import { useUserStore } from '@/stores/user'
 import { authApi } from '@/utils/api'
 
 const router = useRouter()
 const userStore = useUserStore()
-const formRef = ref(null)
 const loading = ref(false)
-
-const form = reactive({
-  username: '',
-  password: ''
-})
-
-const rules = {
-  username: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
-  password: [{ required: true, message: '请输入密码', trigger: 'blur' }]
-}
+const form = reactive({ username: '', password: '' })
 
 const onSubmit = async () => {
-  const valid = await formRef.value?.validate().catch(() => false)
-  if (!valid) return
-  
   loading.value = true
   try {
     const data = await authApi.staffLogin(form)
-    
-    if (!['DOCTOR', 'CHIEF'].includes(data.role)) {
-      ElMessage.error('请使用医生账号登录')
-      return
-    }
-    
+    if (data.role !== 'DOCTOR' && data.role !== 'CHIEF') { message.error('请使用医生账号登录'); return }
     userStore.login(data)
-    ElMessage.success('登录成功')
     router.push('/doctor/workstation')
-  } catch (e) {
-    console.error('Login failed', e)
-  } finally {
-    loading.value = false
-  }
+  } catch (e) { console.error(e) } finally { loading.value = false }
 }
 </script>
 
@@ -78,39 +53,19 @@ const onSubmit = async () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+  background: linear-gradient(135deg, #f0f2f5 0%, #e6ffed 100%);
   
   .login-box {
     width: 400px;
-    background: #fff;
-    border-radius: 12px;
     padding: 40px;
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
     text-align: center;
     
-    .logo {
-      font-size: 64px;
-      margin-bottom: 10px;
-    }
-    
-    h1 {
-      margin: 0 0 5px;
-      font-size: 24px;
-    }
-    
-    p {
-      margin: 0 0 30px;
-      color: #999;
-      font-size: 14px;
-    }
-    
-    .back-link {
-      margin-top: 20px;
-      
-      a {
-        color: #409eff;
-        cursor: pointer;
-      }
-    }
+    .logo { font-size: 48px; margin-bottom: 16px; }
+    h1 { margin-bottom: 32px; color: #1f1f1f; font-size: 24px; }
+    .back-link { margin-top: 16px; }
   }
 }
 </style>

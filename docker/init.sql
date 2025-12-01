@@ -1,6 +1,8 @@
 -- TinyHIS Database Initialization Script
 -- This script is automatically run when the MySQL container starts
 
+SET NAMES utf8mb4;
+
 -- Create database if not exists
 CREATE DATABASE IF NOT EXISTS tinyhis CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
@@ -139,7 +141,7 @@ CREATE TABLE IF NOT EXISTS emr_template (
 
 -- Insert default admin user (password: admin123)
 INSERT INTO sys_user (username, password, real_name, role, status) VALUES
-('admin', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBpwTTyU3VxqW6', '系统管理员', 'ADMIN', 1);
+('admin', '$2b$12$yQGPk2NMixiNrfeT2cK9uOyju6gfhyic9XfbyR7iZkfV3xzpc7B.a', '系统管理员', 'ADMIN', 1);
 
 -- Insert sample departments
 INSERT INTO department (dept_name, location, screen_id, description, status) VALUES
@@ -161,12 +163,12 @@ INSERT INTO department (dept_name, location, screen_id, description, status) VAL
 
 -- Insert sample doctors (password: doctor123)
 INSERT INTO sys_user (username, password, real_name, role, dept_id, phone, status) VALUES
-('zhang_chief', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBpwTTyU3VxqW6', '张主任', 'CHIEF', 1, '13800138001', 1),
-('li_doctor', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBpwTTyU3VxqW6', '李医生', 'DOCTOR', 1, '13800138002', 1),
-('wang_chief', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBpwTTyU3VxqW6', '王主任', 'CHIEF', 2, '13800138003', 1),
-('zhao_doctor', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBpwTTyU3VxqW6', '赵医生', 'DOCTOR', 2, '13800138004', 1),
-('lab_user', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBpwTTyU3VxqW6', '检验员', 'LAB', 14, '13800138005', 1),
-('pharmacy_user', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBpwTTyU3VxqW6', '药剂师', 'PHARMACY', 15, '13800138006', 1);
+('zhang_chief', '$2b$12$oZWQgp6WlFlRQ0QxoX5mEOYWMCZYEaicJKNyDkZK9C1It6XYslhsa', '张主任', 'CHIEF', 1, '13800138001', 1),
+('li_doctor', '$2b$12$oZWQgp6WlFlRQ0QxoX5mEOYWMCZYEaicJKNyDkZK9C1It6XYslhsa', '李医生', 'DOCTOR', 1, '13800138002', 1),
+('wang_chief', '$2b$12$oZWQgp6WlFlRQ0QxoX5mEOYWMCZYEaicJKNyDkZK9C1It6XYslhsa', '王主任', 'CHIEF', 2, '13800138003', 1),
+('zhao_doctor', '$2b$12$oZWQgp6WlFlRQ0QxoX5mEOYWMCZYEaicJKNyDkZK9C1It6XYslhsa', '赵医生', 'DOCTOR', 2, '13800138004', 1),
+('lab_user', '$2b$12$oZWQgp6WlFlRQ0QxoX5mEOYWMCZYEaicJKNyDkZK9C1It6XYslhsa', '检验员', 'LAB', 14, '13800138005', 1),
+('pharmacy_user', '$2b$12$oZWQgp6WlFlRQ0QxoX5mEOYWMCZYEaicJKNyDkZK9C1It6XYslhsa', '药剂师', 'PHARMACY', 15, '13800138006', 1);
 
 -- Insert sample drugs
 INSERT INTO drug_dict (name, spec, price, stock_quantity, unit, manufacturer, status) VALUES

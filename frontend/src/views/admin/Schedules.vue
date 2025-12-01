@@ -2,66 +2,62 @@
   <div class="schedules-page">
     <div class="page-header">
       <h2>排班管理</h2>
-      <el-button type="primary" @click="showAddDialog">新增排班</el-button>
+      <a-button type="primary" @click="showAddDialog">新增排班</a-button>
     </div>
     
     <div class="filters">
-      <el-select v-model="filterDept" placeholder="选择科室" @change="loadSchedules" style="width: 150px">
-        <el-option v-for="d in departments" :key="d.deptId" :label="d.deptName" :value="d.deptId" />
-      </el-select>
-      <el-date-picker v-model="dateRange" type="daterange" start-placeholder="开始" end-placeholder="结束" @change="loadSchedules" />
+      <a-select v-model:value="filterDept" placeholder="选择科室" @change="loadSchedules" style="width: 150px">
+        <a-select-option v-for="d in departments" :key="d.deptId" :value="d.deptId">{{ d.deptName }}</a-select-option>
+      </a-select>
+      <a-range-picker v-model:value="dateRange" @change="loadSchedules" />
     </div>
     
-    <el-table :data="schedules" stripe>
-      <el-table-column prop="scheduleId" label="ID" width="60" />
-      <el-table-column prop="doctorName" label="医生" />
-      <el-table-column prop="date" label="日期" />
-      <el-table-column prop="shift" label="班次">
-        <template #default="{ row }">{{ row.shift === 'AM' ? '上午' : '下午' }}</template>
-      </el-table-column>
-      <el-table-column label="号源">
-        <template #default="{ row }">{{ row.quotaLeft }} / {{ row.quotaLeft + 10 }}</template>
-      </el-table-column>
-    </el-table>
+    <a-table :dataSource="schedules" :columns="columns" rowKey="scheduleId">
+      <template #bodyCell="{ column, record }">
+        <template v-if="column.key === 'shift'">
+          {{ record.shift === 'AM' ? '上午' : '下午' }}
+        </template>
+        <template v-if="column.key === 'quota'">
+          {{ record.quotaLeft }} / {{ record.quotaLeft + 10 }}
+        </template>
+      </template>
+    </a-table>
     
     <!-- Add Schedule Dialog -->
-    <el-dialog v-model="dialogVisible" title="新增排班" width="500px">
-      <el-form :model="form" label-width="80px">
-        <el-form-item label="科室">
-          <el-select v-model="form.deptId" @change="loadDoctors" style="width: 100%">
-            <el-option v-for="d in departments" :key="d.deptId" :label="d.deptName" :value="d.deptId" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="医生">
-          <el-select v-model="form.doctorId" style="width: 100%">
-            <el-option v-for="d in doctors" :key="d.userId" :label="d.realName" :value="d.userId" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="日期">
-          <el-date-picker v-model="form.scheduleDate" type="date" style="width: 100%" />
-        </el-form-item>
-        <el-form-item label="班次">
-          <el-radio-group v-model="form.shiftType">
-            <el-radio label="AM">上午</el-radio>
-            <el-radio label="PM">下午</el-radio>
-          </el-radio-group>
-        </el-form-item>
-        <el-form-item label="最大号源">
-          <el-input-number v-model="form.maxQuota" :min="1" :max="100" />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="saveSchedule">保存</el-button>
-      </template>
-    </el-dialog>
+    <a-modal v-model:open="dialogVisible" title="新增排班" @ok="saveSchedule">
+      <a-form :model="form" :label-col="{ span: 4 }" :wrapper-col="{ span: 20 }">
+        <a-form-item label="科室">
+          <a-select v-model:value="form.deptId" @change="loadDoctors" style="width: 100%">
+            <a-select-option v-for="d in departments" :key="d.deptId" :value="d.deptId">{{ d.deptName }}</a-select-option>
+          </a-select>
+        </a-form-item>
+        <a-form-item label="医生">
+          <a-select v-model:value="form.doctorId" style="width: 100%">
+            <a-select-option v-for="d in doctors" :key="d.userId" :value="d.userId">{{ d.realName }}</a-select-option>
+          </a-select>
+        </a-form-item>
+        <a-form-item label="日期">
+          <a-date-picker v-model:value="form.scheduleDate" style="width: 100%" />
+        </a-form-item>
+        <a-form-item label="班次">
+          <a-radio-group v-model:value="form.shiftType">
+            <a-radio value="AM">上午</a-radio>
+            <a-radio value="PM">下午</a-radio>
+          </a-radio-group>
+        </a-form-item>
+        <a-form-item label="最大号源">
+          <a-input-number v-model:value="form.maxQuota" :min="1" :max="100" />
+        </a-form-item>
+      </a-form>
+    </a-modal>
   </div>
 </template>
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
-import { ElMessage } from 'element-plus'
+import { message } from 'ant-design-vue'
 import { scheduleApi } from '@/utils/api'
+import dayjs from 'dayjs'
 
 const departments = ref([])
 const doctors = ref([])
@@ -78,14 +74,27 @@ const form = reactive({
   maxQuota: 30
 })
 
+const columns = [
+  { title: 'ID', dataIndex: 'scheduleId', key: 'scheduleId', width: 60 },
+  { title: '医生', dataIndex: 'doctorName', key: 'doctorName' },
+  { title: '日期', dataIndex: 'date', key: 'date' },
+  { title: '班次', dataIndex: 'shift', key: 'shift' },
+  { title: '号源', key: 'quota' }
+]
+
 onMounted(async () => {
   try { departments.value = await scheduleApi.getDepartments() } catch (e) { console.error(e) }
 })
 
+const formatDateLocal = (date) => {
+  if (!date) return null
+  return dayjs(date).format('YYYY-MM-DD')
+}
+
 const loadSchedules = async () => {
   if (!filterDept.value) return
-  const start = dateRange.value?.[0]?.toISOString().split('T')[0] || new Date().toISOString().split('T')[0]
-  const end = dateRange.value?.[1]?.toISOString().split('T')[0] || new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0]
+  const start = dateRange.value ? formatDateLocal(dateRange.value[0]) : formatDateLocal(new Date())
+  const end = dateRange.value ? formatDateLocal(dateRange.value[1]) : formatDateLocal(new Date(Date.now() + 7 * 86400000))
   try { schedules.value = await scheduleApi.getScheduleList(filterDept.value, start, end) } catch (e) { console.error(e) }
 }
 
@@ -95,27 +104,40 @@ const loadDoctors = async () => {
 }
 
 const showAddDialog = () => {
-  Object.assign(form, { deptId: null, doctorId: null, scheduleDate: null, shiftType: 'AM', maxQuota: 30 })
+  form.deptId = null
+  form.doctorId = null
+  form.scheduleDate = null
+  form.shiftType = 'AM'
+  form.maxQuota = 30
   dialogVisible.value = true
 }
 
 const saveSchedule = async () => {
   try {
     await scheduleApi.saveSchedule({
-      doctorId: form.doctorId,
-      scheduleDate: form.scheduleDate?.toISOString().split('T')[0],
-      shiftType: form.shiftType,
-      maxQuota: form.maxQuota,
-      currentCount: 0,
-      status: 1
+      ...form,
+      scheduleDate: formatDateLocal(form.scheduleDate)
     })
-    ElMessage.success('保存成功')
+    message.success('排班已保存')
     dialogVisible.value = false
     loadSchedules()
   } catch (e) { console.error(e) }
 }
 </script>
 
-<style scoped lang="scss">
-.schedules-page { padding: 20px; .page-header { display: flex; justify-content: space-between; margin-bottom: 20px; h2 { margin: 0; } } .filters { display: flex; gap: 10px; margin-bottom: 20px; } }
+<style scoped>
+.schedules-page {
+  padding: 20px;
+}
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+.filters {
+  margin-bottom: 20px;
+  display: flex;
+  gap: 10px;
+}
 </style>

@@ -1,5 +1,13 @@
-# TinyHIS Backend Dockerfile
-FROM eclipse-temurin:17-jre-alpine
+# Build stage
+FROM maven:3.9-eclipse-temurin-21 AS build
+WORKDIR /app
+COPY docker/settings.xml /usr/share/maven/conf/settings.xml
+COPY pom.xml .
+COPY src ./src
+RUN mvn clean package -DskipTests
+
+# Run stage
+FROM eclipse-temurin:21-jre-alpine
 
 LABEL maintainer="TinyHIS Team"
 LABEL description="TinyHIS - Lightweight Hospital Information System"
@@ -10,8 +18,8 @@ WORKDIR /app
 # Create non-root user for security
 RUN addgroup -S tinyhis && adduser -S tinyhis -G tinyhis
 
-# Copy the built jar file
-COPY target/tinyhis-*.jar app.jar
+# Copy the built jar file from build stage
+COPY --from=build /app/target/tinyhis-*.jar app.jar
 
 # Create directories for knowledge base and logs
 RUN mkdir -p /app/medical-knowledge /app/logs && \

@@ -20,4 +20,19 @@ public interface ExcelService {
      * Export drugs to Excel file
      */
     void exportDrugs(HttpServletResponse response);
+
+    /**
+     * Import check items from Excel file
+     */
+    List<com.tinyhis.dto.CheckItemExcelDTO> importCheckItems(MultipartFile file);
+
+    /**
+     * Export check items to Excel file
+     */
+    void exportCheckItems(HttpServletResponse response);
+
+    /**
+     * Export drug usage report
+     */
+    void exportDrugUsageReport(HttpServletResponse response, java.time.LocalDateTime startDate, java.time.LocalDateTime endDate, java.util.List<Long> deptIds);
 }

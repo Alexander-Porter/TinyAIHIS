@@ -1,15 +1,18 @@
 <template>
   <div class="lab-layout">
     <div class="sidebar" v-if="isLoggedIn">
-      <div class="logo"><span>🔬</span> 检验科</div>
-      <el-menu :default-active="'workstation'">
-        <el-menu-item index="workstation">
-          <el-icon><Monitor /></el-icon>
+      <div class="logo">
+        <div class="logo-icon"><ExperimentOutlined /></div>
+        <span>检验科</span>
+      </div>
+      <a-menu :selectedKeys="['workstation']" mode="inline">
+        <a-menu-item key="workstation">
+          <template #icon><DesktopOutlined /></template>
           <span>检验工作台</span>
-        </el-menu-item>
-      </el-menu>
+        </a-menu-item>
+      </a-menu>
       <div class="logout" @click="logout">
-        <el-icon><SwitchButton /></el-icon> 退出登录
+        <LogoutOutlined /> 退出登录
       </div>
     </div>
     <div class="main-content">
@@ -21,7 +24,7 @@
 <script setup>
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Monitor, SwitchButton } from '@element-plus/icons-vue'
+import { DesktopOutlined, LogoutOutlined, ExperimentOutlined } from '@ant-design/icons-vue'
 import { useUserStore } from '@/stores/user'
 
 const route = useRoute()
@@ -39,51 +42,85 @@ const logout = () => {
 .lab-layout {
   display: flex;
   height: 100vh;
+  background-color: var(--bg-body);
   
   .sidebar {
-    width: 220px;
-    background: #304156;
+    width: 260px;
+    background: var(--bg-surface);
+    border-right: 1px solid var(--border-color);
     display: flex;
     flex-direction: column;
+    box-shadow: var(--shadow-sm);
+    z-index: 10;
     
     .logo {
-      height: 60px;
+      height: 80px;
       display: flex;
       align-items: center;
-      justify-content: center;
-      color: #fff;
-      font-size: 20px;
-      font-weight: bold;
+      padding: 0 24px;
+      color: var(--text-primary);
+      font-size: 1.125rem;
+      font-weight: 600;
+      border-bottom: 1px solid var(--border-color);
       
-      span { margin-right: 8px; }
+      .logo-icon {
+        width: 32px;
+        height: 32px;
+        background: var(--primary-color);
+        color: #fff;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-right: 12px;
+      }
     }
     
-    .el-menu {
+    :deep(.ant-menu) {
       flex: 1;
       border: none;
       background: transparent;
+      padding: 16px 0;
       
-      .el-menu-item {
-        color: rgba(255,255,255,0.8);
-        &:hover, &.is-active { background: rgba(255,255,255,0.1); color: #fff; }
+      .ant-menu-item {
+        height: 50px;
+        line-height: 50px;
+        margin: 4px 16px;
+        border-radius: var(--radius-md);
+        color: var(--text-secondary);
+        
+        &:hover {
+          background: var(--bg-body);
+          color: var(--text-primary);
+        }
+        
+        &.ant-menu-item-selected {
+          background: rgba(0, 102, 204, 0.1);
+          color: var(--accent-color);
+          font-weight: 500;
+        }
       }
     }
     
     .logout {
-      padding: 15px 20px;
-      color: rgba(255,255,255,0.6);
+      padding: 20px;
       cursor: pointer;
+      color: var(--text-secondary);
+      border-top: 1px solid var(--border-color);
       display: flex;
       align-items: center;
-      gap: 8px;
-      &:hover { color: #fff; }
+      gap: 10px;
+      
+      &:hover {
+        color: var(--error-color);
+      }
     }
   }
   
   .main-content {
     flex: 1;
     overflow: auto;
-    background: #f5f7fa;
+    background: var(--bg-body);
   }
 }
 </style>
