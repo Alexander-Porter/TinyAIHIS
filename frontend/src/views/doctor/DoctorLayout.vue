@@ -1,32 +1,31 @@
 <template>
   <div class="doctor-layout">
-    <div class="sidebar" v-if="isLoggedIn">
-      <div class="logo">
-        <div class="logo-icon"><MedicineBoxOutlined /></div>
-        <span>医生工作站</span>
-      </div>
-      <div class="user-info">
-        <div class="avatar"><UserOutlined /></div>
-        <div class="info">
-          <div class="name">{{ userStore.userInfo.realName }}</div>
-          <div class="role">{{ userStore.userInfo.role === 'CHIEF' ? '科室主任' : '主治医师' }}</div>
+    <!-- Top Navigation Bar -->
+    <div class="top-nav" v-if="isLoggedIn">
+      <div class="nav-left">
+        <div class="logo">
+          <MedicineBoxOutlined />
+          <span>医生工作站</span>
+        </div>
+        <div class="nav-menu">
+          <div class="nav-item" :class="{ active: activeMenu === 'workstation' }" @click="router.push('/doctor/workstation')">
+            <DesktopOutlined /> 接诊工作台
+          </div>
+          <div class="nav-item" :class="{ active: activeMenu === 'templates' }" @click="router.push('/doctor/templates')" v-if="userStore.userInfo.role === 'CHIEF'">
+            <FileTextOutlined /> 模板管理
+          </div>
         </div>
       </div>
-      <a-menu :selectedKeys="[activeMenu]" mode="inline" @click="handleMenuSelect">
-        <a-menu-item key="workstation">
-          <template #icon><DesktopOutlined /></template>
-          <span>接诊工作台</span>
-        </a-menu-item>
-        <a-menu-item key="templates" v-if="userStore.userInfo.role === 'CHIEF'">
-          <template #icon><FileTextOutlined /></template>
-          <span>模板管理</span>
-        </a-menu-item>
-      </a-menu>
-      <div class="logout" @click="logout">
-        <LogoutOutlined /> 退出登录
+      <div class="nav-right">
+        <div class="user-info">
+          <UserOutlined />
+          <span>{{ userStore.userInfo.realName }}</span>
+          <a-tag size="small">{{ userStore.userInfo.role === 'CHIEF' ? '主任' : '医师' }}</a-tag>
+        </div>
+        <a-button type="text" @click="logout"><LogoutOutlined /> 退出</a-button>
       </div>
     </div>
-    <div class="main-content">
+    <div class="main-content" :class="{ 'with-nav': isLoggedIn }">
       <router-view />
     </div>
   </div>
@@ -49,10 +48,6 @@ const activeMenu = computed(() => {
   return 'workstation'
 })
 
-const handleMenuSelect = ({ key }) => {
-  router.push(/doctor/)
-}
-
 const logout = () => {
   userStore.logout()
   router.push('/doctor/login')
@@ -62,123 +57,87 @@ const logout = () => {
 <style scoped lang="scss">
 .doctor-layout {
   display: flex;
+  flex-direction: column;
   height: 100vh;
   background-color: var(--bg-body);
-  
-  .sidebar {
-    width: 260px;
+
+  .top-nav {
+    height: 56px;
     background: var(--bg-surface);
-    border-right: 1px solid var(--border-color);
+    border-bottom: 1px solid var(--border-color);
     display: flex;
-    flex-direction: column;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 24px;
     box-shadow: var(--shadow-sm);
-    z-index: 10;
-    
-    .logo {
-      height: 80px;
+    z-index: 100;
+    flex-shrink: 0;
+
+    .nav-left {
       display: flex;
       align-items: center;
-      padding: 0 24px;
-      color: var(--text-primary);
-      font-size: 1.125rem;
-      font-weight: 600;
-      border-bottom: 1px solid var(--border-color);
-      
-      .logo-icon {
-        width: 32px;
-        height: 32px;
-        background: var(--primary-color);
-        color: #fff;
-        border-radius: 8px;
+      gap: 32px;
+
+      .logo {
         display: flex;
         align-items: center;
-        justify-content: center;
-        margin-right: 12px;
+        gap: 10px;
+        font-size: 1.1rem;
+        font-weight: 600;
+        color: var(--primary-color);
       }
-    }
-    
-    .user-info {
-      padding: 24px;
-      display: flex;
-      align-items: center;
-      border-bottom: 1px solid var(--border-color);
-      
-      .avatar {
-        width: 48px;
-        height: 48px;
-        background: var(--bg-body);
-        border-radius: 50%;
+
+      .nav-menu {
         display: flex;
-        align-items: center;
-        justify-content: center;
-        color: var(--text-secondary);
-        font-size: 1.25rem;
-        margin-right: 16px;
-      }
-      
-      .info {
-        .name {
-          font-weight: 600;
-          color: var(--text-primary);
-          margin-bottom: 4px;
-        }
-        
-        .role {
-          font-size: 0.75rem;
+        gap: 8px;
+
+        .nav-item {
+          padding: 8px 16px;
+          border-radius: var(--radius-md);
+          cursor: pointer;
           color: var(--text-secondary);
-          background: var(--bg-body);
-          padding: 2px 8px;
-          border-radius: 10px;
-          display: inline-block;
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          font-size: 0.9rem;
+          transition: all 0.2s;
+
+          &:hover {
+            background: var(--bg-body);
+            color: var(--text-primary);
+          }
+
+          &.active {
+            background: rgba(0, 102, 204, 0.1);
+            color: var(--accent-color);
+            font-weight: 500;
+          }
         }
       }
     }
-    
-    :deep(.ant-menu) {
-      flex: 1;
-      border: none;
-      background: transparent;
-      padding: 16px 0;
-      
-      .ant-menu-item {
-        height: 50px;
-        line-height: 50px;
-        margin: 4px 16px;
-        border-radius: var(--radius-md);
-        color: var(--text-secondary);
-        
-        &:hover {
-          background: var(--bg-body);
-          color: var(--text-primary);
-        }
-        
-        &.ant-menu-item-selected {
-          background: rgba(0, 102, 204, 0.1);
-          color: var(--accent-color);
-          font-weight: 500;
-        }
-      }
-    }
-    
-    .logout {
-      padding: 20px;
-      cursor: pointer;
-      color: var(--text-secondary);
-      border-top: 1px solid var(--border-color);
+
+    .nav-right {
       display: flex;
       align-items: center;
-      gap: 10px;
-      
-      &:hover {
-        color: var(--error-color);
+      gap: 16px;
+
+      .user-info {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--text-secondary);
+        font-size: 0.9rem;
       }
     }
   }
-  
+
   .main-content {
     flex: 1;
     overflow: auto;
-    background: var(--bg-body);
+
+    &.with-nav {
+      height: calc(100vh - 56px);
+    }
   }
 }
 </style>

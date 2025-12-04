@@ -2,9 +2,11 @@ package com.tinyhis.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.tinyhis.dto.ScheduleDTO;
+import com.tinyhis.entity.ConsultingRoom;
 import com.tinyhis.entity.Department;
 import com.tinyhis.entity.Schedule;
 import com.tinyhis.entity.SysUser;
+import com.tinyhis.mapper.ConsultingRoomMapper;
 import com.tinyhis.mapper.DepartmentMapper;
 import com.tinyhis.mapper.ScheduleMapper;
 import com.tinyhis.mapper.SysUserMapper;
@@ -18,6 +20,8 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * Schedule Service Implementation
@@ -34,6 +38,7 @@ public class ScheduleServiceImpl implements ScheduleService {
     private final DepartmentMapper departmentMapper;
     private final ScheduleMapper scheduleMapper;
     private final SysUserMapper sysUserMapper;
+    private final ConsultingRoomMapper consultingRoomMapper;
 
     private static final BigDecimal DEFAULT_FEE = new BigDecimal("50.00");
     private static final int MAX_RETRY_TIMES = 3;
@@ -81,6 +86,15 @@ public class ScheduleServiceImpl implements ScheduleService {
 
         List<Schedule> schedules = scheduleMapper.selectList(wrapper);
         Department dept = getDepartmentById(deptId);
+        
+        // Load all consulting rooms for mapping
+        Map<Long, ConsultingRoom> roomMap = consultingRoomMapper.selectList(null)
+                .stream()
+                .collect(Collectors.toMap(ConsultingRoom::getRoomId, r -> r));
+
+        // 计算号源过期状态
+        LocalDate today = LocalDate.now();
+        int currentHour = java.time.LocalTime.now().getHour();
 
         List<ScheduleDTO> result = new ArrayList<>();
         for (Schedule s : schedules) {
@@ -93,7 +107,34 @@ public class ScheduleServiceImpl implements ScheduleService {
             dto.setCurrentCount(s.getCurrentCount());
             dto.setQuotaLeft(s.getMaxQuota() - s.getCurrentCount());
             dto.setFee(DEFAULT_FEE);
+            dto.setDeptId(deptId);
             dto.setDeptName(dept != null ? dept.getDeptName() : null);
+            
+            // Set room info
+            dto.setRoomId(s.getRoomId());
+            if (s.getRoomId() != null && roomMap.containsKey(s.getRoomId())) {
+                ConsultingRoom room = roomMap.get(s.getRoomId());
+                dto.setRoomName(room.getRoomName());
+                dto.setRoomLocation(room.getLocation());
+            }
+            
+            // 计算是否过期
+            boolean expired = false;
+            LocalDate scheduleDate = s.getScheduleDate();
+            String shift = s.getShiftType();
+            
+            if (scheduleDate.isBefore(today)) {
+                // 过去的日期一律过期
+                expired = true;
+            } else if (scheduleDate.equals(today) && !"ER".equalsIgnoreCase(shift)) {
+                // 当天的号，根据时段判断
+                if ("AM".equalsIgnoreCase(shift) && currentHour >= 12) {
+                    expired = true;  // 上午号在12点后过期
+                } else if ("PM".equalsIgnoreCase(shift) && currentHour >= 18) {
+                    expired = true;  // 下午号在18点后过期
+                }
+            }
+            dto.setExpired(expired);
             
             // Find doctor name
             doctors.stream()

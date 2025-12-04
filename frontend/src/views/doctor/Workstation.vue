@@ -1,178 +1,361 @@
 <template>
   <div class="workstation">
-    <div class="workstation-header">
-      <h2>接诊工作台</h2>
-      <div class="actions">
-        <a-button type="primary" @click="callNext" :loading="calling">
-          <template #icon><BellOutlined /></template> 叫号
-        </a-button>
-      </div>
-    </div>
-    
     <div class="workstation-content">
-      <!-- Left: Queue & Patient Info (20%) -->
+      <!-- Left: Patient List -->
       <div class="left-panel">
-        <div class="panel-card queue-panel">
+        <div class="panel-card patient-list-panel">
           <div class="panel-header">
-            <span>候诊队列</span>
-            <a-tag>{{ queue.length }} 人</a-tag>
+            <div class="header-title">
+              <span>今日患者</span>
+              <a-tag color="blue">{{ patients.length }}</a-tag>
+            </div>
+            <a-button type="primary" size="small" @click="callNext" :loading="calling">
+              <template #icon><BellOutlined /></template> 叫号
+            </a-button>
           </div>
-          <div class="queue-list">
-            <div class="queue-empty" v-if="queue.length === 0">
-              暂无候诊患者
+          <!-- 患者状态筛选 -->
+          <div class="patient-filter">
+            <a-radio-group v-model:value="patientFilter" size="small" button-style="solid">
+              <a-radio-button value="all">全部</a-radio-button>
+              <a-radio-button value="waiting">待诊 ({{ waitingCount }})</a-radio-button>
+              <a-radio-button value="consulting">就诊中</a-radio-button>
+              <a-radio-button value="completed">已完成</a-radio-button>
+            </a-radio-group>
+          </div>
+          <div class="patient-list">
+            <div class="patient-empty" v-if="filteredPatients.length === 0">
+              暂无患者
             </div>
             <div 
-              class="queue-item" 
-              v-for="item in queue" 
-              :key="item.regId"
-              :class="{ current: currentPatient?.regId === item.regId }"
-              @click="selectPatient(item)">
-              <div class="number">{{ item.queueNumber }}</div>
-              <div class="info">
-                <div class="name">{{ item.patientName || '患者 #' + item.patientId }}</div>
-                <div class="status">{{ getStatusText(item.status) }}</div>
+              class="patient-item" 
+              v-for="p in filteredPatients" 
+              :key="p.regId"
+              :class="{ 
+                current: currentPatient?.regId === p.regId,
+                'in-consultation': p.status === 3,
+                'waiting': p.status === 1 || p.status === 2,
+                'completed': p.status === 4
+              }"
+              @click="selectPatient(p)">
+              <div class="patient-number">{{ p.queueNumber || '-' }}</div>
+              <div class="patient-info">
+                <div class="name">{{ p.patientName || '患者#' + p.patientId }}</div>
+                <div class="meta">
+                  <span>{{ p.gender === 1 ? '男' : '女' }}</span>
+                  <span v-if="p.age">{{ p.age }}岁</span>
+                </div>
+              </div>
+              <div class="patient-status">
+                <a-tag :color="getStatusColor(p.status)" size="small">
+                  {{ getStatusText(p.status) }}
+                </a-tag>
+                <a-tag v-if="p.labOrders?.some(l => l.status === 2)" color="success" size="small">
+                  检查完成
+                </a-tag>
               </div>
             </div>
-          </div>
-        </div>
-        
-        <div class="panel-card patient-info-panel" v-if="currentPatient">
-          <div class="panel-header">当前患者</div>
-          <div class="info-content">
-            <p><strong>姓名:</strong> {{ currentPatient.patientName || '未知' }}</p>
-            <p><strong>性别:</strong> {{ currentPatient.gender === 1 ? '男' : '女' }}</p>
-            <p><strong>年龄:</strong> {{ currentPatient.age || '-' }}岁</p>
           </div>
         </div>
       </div>
       
-      <!-- Middle: EMR Editor (50%) -->
+      <!-- Middle: Main Workspace -->
       <div class="middle-panel">
-        <div class="panel-card emr-editor" v-if="currentPatient">
-          <div class="panel-header">
-            <span>病历录入</span>
-            <div class="tools">
-               <a-button size="small" type="link" @click="activeTab = 'templates'">引用模板</a-button>
+        <template v-if="currentPatient">
+          <!-- Patient Action Bar -->
+          <div class="action-header">
+            <div class="patient-basic">
+              <span class="name">{{ currentPatient.patientName }}</span>
+              <span class="meta">{{ currentPatient.gender === 1 ? '男' : '女' }} {{ currentPatient.age }}岁</span>
+              <a-tag v-if="currentPatient.status === 3" color="processing">就诊中</a-tag>
+              <a-tag v-else color="warning">暂停中</a-tag>
+            </div>
+            <div class="actions">
+              <a-button v-if="currentPatient.status === 3" size="small" @click="pauseCurrentPatient">
+                <template #icon><PauseOutlined /></template> 暂停
+              </a-button>
+              <a-button v-if="currentPatient.status === 2" type="primary" size="small" @click="resumeCurrentPatient">
+                <template #icon><PlayCircleOutlined /></template> 继续
+              </a-button>
+              <a-button type="primary" size="small" @click="completeVisit" :disabled="currentPatient.status !== 3">
+                <template #icon><CheckOutlined /></template> 完成就诊
+              </a-button>
             </div>
           </div>
-          <div class="emr-form-container">
-            <a-form :model="emrForm" layout="vertical">
-              <a-form-item label="主诉">
-                <a-textarea v-model:value="emrForm.symptom" :rows="2" placeholder="患者主诉" />
-              </a-form-item>
-              <a-form-item label="诊断">
-                <a-input v-model:value="emrForm.diagnosis" placeholder="诊断结果" />
-              </a-form-item>
-              <a-form-item label="现病史/查体">
-                <a-textarea v-model:value="emrForm.content" :rows="12" placeholder="详细病历内容..." />
-              </a-form-item>
-            </a-form>
-            <div class="emr-actions">
-              <a-button type="primary" @click="saveEmr" :loading="saving">保存病历</a-button>
-              <a-button type="primary" ghost @click="completeVisit" style="margin-left: 10px">完成就诊</a-button>
-            </div>
+
+          <!-- Main Tabs -->
+          <div class="panel-card content-card">
+            <a-tabs v-model:activeKey="mainTab" type="card" class="workspace-tabs">
+              <!-- Tab 1: EMR -->
+              <a-tab-pane key="emr" tab="病历文书">
+                <div class="tab-content">
+                  <!-- 模式切换 -->
+                  <div class="emr-mode-switch">
+                    <a-radio-group v-model:value="emrMode" button-style="solid" size="small">
+                      <a-radio-button value="simple">简易模式</a-radio-button>
+                      <a-radio-button value="template">电子病历</a-radio-button>
+                    </a-radio-group>
+                    <a-button size="small" @click="printEmr" v-if="emrMode === 'template'">
+                      <template #icon><PrinterOutlined /></template> 打印病历
+                    </a-button>
+                  </div>
+
+                  <!-- 简易模式 -->
+                  <template v-if="emrMode === 'simple'">
+                    <a-form :model="emrForm" layout="vertical" class="emr-form">
+                      <a-form-item label="主诉">
+                        <a-textarea v-model:value="emrForm.symptom" :rows="2" placeholder="患者主诉..." />
+                      </a-form-item>
+                      <a-form-item label="诊断">
+                        <a-input v-model:value="emrForm.diagnosis" placeholder="诊断结果" />
+                      </a-form-item>
+                      <a-form-item label="现病史/查体">
+                        <a-textarea v-model:value="emrForm.content" :rows="8" placeholder="详细内容..." />
+                      </a-form-item>
+                      <div class="form-actions">
+                        <a-button type="primary" @click="saveEmr" :loading="saving">
+                          <template #icon><SaveOutlined /></template> 保存病历
+                        </a-button>
+                      </div>
+                    </a-form>
+                  </template>
+
+                  <!-- 电子病历模板模式 -->
+                  <template v-else>
+                    <EmrEditor 
+                      ref="emrEditorRef"
+                      v-model="emrTemplateData"
+                      :patientInfo="currentPatientInfo"
+                      :hospitalName="'清远友谊医院'"
+                      @print="handleEmrPrint"
+                    />
+                    <div class="form-actions">
+                      <a-button type="primary" @click="saveEmrFromTemplate" :loading="saving">
+                        <template #icon><SaveOutlined /></template> 保存病历
+                      </a-button>
+                    </div>
+                  </template>
+                </div>
+              </a-tab-pane>
+
+              <!-- Tab 2: Lab Orders -->
+              <a-tab-pane key="lab" tab="检查检验">
+                <div class="tab-content">
+                  <div class="section-header">
+                    <span>已开项目</span>
+                    <div class="header-actions">
+                      <a-button size="small" @click="printLabOrders" :disabled="labOrders.length === 0">
+                        <template #icon><PrinterOutlined /></template> 打印申请单
+                      </a-button>
+                      <a-button type="primary" size="small" @click="addLabOrder">+ 开立检查</a-button>
+                    </div>
+                  </div>
+                  <div class="lab-list">
+                    <div v-if="labOrders.length === 0" class="empty-tip">暂无检查项目</div>
+                    <div class="lab-item" v-for="(lab, idx) in labOrders" :key="idx">
+                      <div class="lab-row">
+                        <div class="lab-info">
+                          <a-auto-complete
+                            v-model:value="lab.itemName"
+                            :options="commonLabItems"
+                            placeholder="检查项目名称"
+                            style="width: 200px"
+                            @select="(val) => onLabSelect(val, lab)"
+                            :disabled="!!lab.orderId"
+                          />
+                          <span class="price">¥{{ lab.price }}</span>
+                        </div>
+                        <div class="lab-status">
+                          <a-tag :color="getLabStatusColor(lab.status)">{{ getLabStatusText(lab.status) }}</a-tag>
+                          <a-button 
+                            v-if="lab.status === 2" 
+                            type="link" 
+                            size="small" 
+                            @click="viewReport(lab)"
+                          >查看报告</a-button>
+                          <a-button 
+                            v-if="!lab.orderId" 
+                            type="text" 
+                            danger 
+                            @click="labOrders.splice(idx, 1)"
+                          >
+                            <template #icon><DeleteOutlined /></template>
+                          </a-button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="form-actions" v-if="labOrders.some(l => !l.orderId)">
+                    <a-button type="primary" @click="saveEmr" :loading="saving">提交申请</a-button>
+                  </div>
+                </div>
+              </a-tab-pane>
+
+              <!-- Tab 3: Prescriptions -->
+              <a-tab-pane key="prescription" tab="处方开具">
+                <div class="tab-content">
+                  <div class="section-header">
+                    <span>处方明细</span>
+                    <div class="header-actions">
+                      <a-button size="small" @click="printPrescription" :disabled="prescriptions.length === 0">
+                        <template #icon><PrinterOutlined /></template> 打印处方笺
+                      </a-button>
+                      <a-button type="primary" size="small" @click="addPrescription">+ 添加药品</a-button>
+                    </div>
+                  </div>
+                  <div class="prescription-list">
+                    <div v-if="prescriptions.length === 0" class="empty-tip">暂无处方</div>
+                    <a-table 
+                      :dataSource="prescriptions" 
+                      :columns="prescriptionColumns" 
+                      size="small" 
+                      :pagination="false"
+                      rowKey="idx"
+                    >
+                      <template #bodyCell="{ column, record, index }">
+                        <template v-if="column.key === 'drug'">
+                          <a-select 
+                            v-model:value="record.drugId" 
+                            placeholder="选择药品" 
+                            show-search 
+                            option-filter-prop="label" 
+                            style="width: 100%"
+                            :disabled="!!record.presId"
+                          >
+                            <a-select-option v-for="d in drugs" :key="d.drugId" :value="d.drugId" :label="d.name">{{ d.name }}</a-select-option>
+                          </a-select>
+                        </template>
+                        <template v-if="column.key === 'quantity'">
+                          <a-input-number v-model:value="record.quantity" :min="1" size="small" :disabled="!!record.presId" />
+                        </template>
+                        <template v-if="column.key === 'usage'">
+                          <a-input v-model:value="record.usageInstruction" size="small" :disabled="!!record.presId" />
+                        </template>
+                        <template v-if="column.key === 'action'">
+                          <a-button v-if="!record.presId" type="text" danger size="small" @click="prescriptions.splice(index, 1)">
+                            <template #icon><DeleteOutlined /></template>
+                          </a-button>
+                        </template>
+                      </template>
+                    </a-table>
+                  </div>
+                  <div class="form-actions" v-if="prescriptions.some(p => !p.presId)">
+                    <a-button type="primary" @click="saveEmr" :loading="saving">发送处方</a-button>
+                  </div>
+                </div>
+              </a-tab-pane>
+
+              <!-- Tab 4: History -->
+              <a-tab-pane key="history" tab="历史就诊">
+                <div class="history-content">
+                  <a-spin :spinning="loadingHistory">
+                    <div v-if="historyRecords.length === 0" class="empty-tip">暂无历史就诊记录</div>
+                    <a-collapse v-else accordion>
+                      <a-collapse-panel v-for="(record, idx) in historyRecords" :key="idx">
+                        <template #header>
+                          <div class="history-header">
+                            <span class="date">{{ record.scheduleDate }}</span>
+                            <span class="diagnosis">{{ record.medicalRecord?.diagnosis || '未诊断' }}</span>
+                          </div>
+                        </template>
+                        <div class="history-detail">
+                          <div class="detail-row">
+                            <label>主诉：</label>
+                            <span>{{ record.medicalRecord?.symptom || '-' }}</span>
+                          </div>
+                          <div class="detail-row">
+                            <label>诊断：</label>
+                            <span>{{ record.medicalRecord?.diagnosis || '-' }}</span>
+                          </div>
+                          <div class="detail-row">
+                            <label>病历内容：</label>
+                            <span>{{ record.medicalRecord?.content || '-' }}</span>
+                          </div>
+                          <div class="detail-row" v-if="record.labOrders?.length">
+                            <label>检查项目：</label>
+                            <div class="sub-list">
+                              <div v-for="lab in record.labOrders" :key="lab.orderId">
+                                {{ lab.itemName }} - {{ lab.resultText || '无结果' }}
+                              </div>
+                            </div>
+                          </div>
+                          <div class="detail-row" v-if="record.prescriptions?.length">
+                            <label>处方：</label>
+                            <div class="sub-list">
+                              <div v-for="p in record.prescriptions" :key="p.presId">
+                                {{ p.drugName }} x{{ p.quantity }} ({{ p.usageInstruction }})
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </a-collapse-panel>
+                    </a-collapse>
+                  </a-spin>
+                </div>
+              </a-tab-pane>
+            </a-tabs>
           </div>
-        </div>
+        </template>
+
         <div class="no-patient" v-else>
-          <a-empty description="请点击叫号或选择患者" />
+          <a-empty description="请点击左侧叫号开始接诊" />
         </div>
       </div>
 
-      <!-- Right: Tools & History (30%) -->
+      <!-- Right: Templates -->
       <div class="right-panel" v-if="currentPatient">
-        <a-tabs v-model:activeKey="activeTab" type="card" class="tools-tabs">
-          <a-tab-pane key="prescription" tab="处方">
-            <div class="tool-content">
-              <div class="drug-list">
-                <div class="drug-item" v-for="(drug, idx) in prescriptions" :key="idx">
-                  <div class="drug-row">
-                    <a-select v-model:value="drug.drugId" placeholder="选择药品" show-search option-filter-prop="label" size="small" style="width: 100%">
-                      <a-select-option v-for="d in drugs" :key="d.drugId" :value="d.drugId" :label="d.name">{{ d.name }}</a-select-option>
-                    </a-select>
-                    <a-button type="text" danger size="small" @click="prescriptions.splice(idx, 1)"><template #icon><DeleteOutlined /></template></a-button>
-                  </div>
-                  <div class="drug-row">
-                    <a-input-number v-model:value="drug.quantity" :min="1" size="small" style="width: 100px" />
-                    <a-input v-model:value="drug.usageInstruction" placeholder="用法" size="small" style="flex:1; margin-left:5px" />
-                  </div>
-                </div>
-              </div>
-              <a-button type="dashed" size="small" block @click="addPrescription">+ 添加药品</a-button>
+        <div class="panel-card template-panel">
+          <div class="panel-header">常用模板</div>
+          <div class="template-list">
+            <div class="template-item" v-for="tpl in templates" :key="tpl.tplId" @click="applyTemplate(tpl)">
+              <div class="tpl-name">{{ tpl.name }}</div>
+              <a-tag size="small">{{ tpl.type === 'EMR' ? '病历' : '处方' }}</a-tag>
             </div>
-          </a-tab-pane>
-          
-          <a-tab-pane key="lab" tab="检查">
-            <div class="tool-content">
-              <div class="lab-list">
-                <div class="lab-item" v-for="(item, idx) in labOrders" :key="idx">
-                  <div class="lab-row">
-                    <a-auto-complete
-                      v-model:value="item.itemName"
-                      :options="commonLabItems"
-                      placeholder="检查项目"
-                      size="small"
-                      style="width: 100%"
-                      @select="(val) => onLabSelect(val, item)"
-                    />
-                    <a-button type="text" danger size="small" @click="labOrders.splice(idx, 1)"><template #icon><DeleteOutlined /></template></a-button>
-                  </div>
-                  <div class="lab-row">
-                    <a-input-number v-model:value="item.price" :min="0" size="small" placeholder="价格" style="width: 100%" />
-                  </div>
-                </div>
-              </div>
-              <a-button type="dashed" size="small" block @click="addLabOrder">+ 添加检查</a-button>
-            </div>
-          </a-tab-pane>
-          
-          <a-tab-pane key="history" tab="历史">
-            <div class="history-list">
-              <a-timeline>
-                <a-timeline-item
-                  v-for="(record, index) in historyRecords"
-                  :key="index">
-                  <a-card class="history-card" size="small">
-                    <template #title>
-                      <span>{{ formatDate(record.createTime) }}</span>
-                    </template>
-                    <h4>{{ record.diagnosis }}</h4>
-                    <p>{{ record.symptom }}</p>
-                  </a-card>
-                </a-timeline-item>
-              </a-timeline>
-              <div v-if="historyRecords.length === 0" class="empty-text">暂无历史记录</div>
-            </div>
-          </a-tab-pane>
-
-          <a-tab-pane key="templates" tab="模板">
-            <div class="template-list">
-              <div class="template-item" v-for="tpl in templates" :key="tpl.tplId" @click="applyTemplate(tpl)">
-                <div class="tpl-name">{{ tpl.name }}</div>
-                <a-tag size="small">{{ tpl.type === 'EMR' ? '病历' : '处方' }}</a-tag>
-              </div>
-            </div>
-          </a-tab-pane>
-        </a-tabs>
+            <div v-if="templates.length === 0" class="empty-tip">暂无模板</div>
+          </div>
+        </div>
       </div>
     </div>
+
+    <!-- Report Viewer Modal -->
+    <a-modal v-model:open="reportVisible" title="检查报告" :footer="null" width="800px">
+      <div class="report-viewer" v-if="currentReport">
+        <div class="report-header">
+          <h3>{{ currentReport.itemName }}</h3>
+          <span class="time">{{ currentReport.resultTime }}</span>
+        </div>
+        <div class="report-body" v-html="currentReport.resultText"></div>
+      </div>
+    </a-modal>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, watch } from 'vue'
-import { BellOutlined, DeleteOutlined } from '@ant-design/icons-vue'
+import { ref, reactive, onMounted, onBeforeUnmount, computed } from 'vue'
+import { BellOutlined, DeleteOutlined, SaveOutlined, CheckOutlined, PauseOutlined, PlayCircleOutlined, PrinterOutlined } from '@ant-design/icons-vue'
 import { message } from 'ant-design-vue'
-import { doctorApi, emrApi, pharmacyApi, authApi } from '@/utils/api'
+import { doctorApi, emrApi, pharmacyApi } from '@/utils/api'
 import { useUserStore } from '@/stores/user'
+import SockJS from 'sockjs-client'
+import { Client } from '@stomp/stompjs'
+import EmrEditor from '@/components/EmrEditor.vue'
+import PrintTemplates from '@/components/PrintTemplates.vue'
 
 const userStore = useUserStore()
 const doctorId = userStore.userId
+let stompClient = null
 
-const queue = ref([])
+// State
+const patients = ref([])
+const patientFilter = ref('all')
 const currentPatient = ref(null)
-const activeTab = ref('prescription') // Default to prescription tab in right panel
+const mainTab = ref('emr')
+const emrMode = ref('simple') // 'simple' or 'template'
 const calling = ref(false)
 const saving = ref(false)
+const loadingHistory = ref(false)
+const reportVisible = ref(false)
+const currentReport = ref(null)
+
 const drugs = ref([])
 const templates = ref([])
 const historyRecords = ref([])
@@ -183,8 +366,64 @@ const emrForm = reactive({
   content: ''
 })
 
+const emrEditorRef = ref(null)
+const emrTemplateData = ref({})
+
 const prescriptions = ref([])
 const labOrders = ref([])
+
+// Table Columns
+const prescriptionColumns = [
+  { title: '药品名称', key: 'drug', width: '40%' },
+  { title: '数量', key: 'quantity', width: '15%' },
+  { title: '用法用量', key: 'usage', width: '35%' },
+  { title: '', key: 'action', width: '10%' }
+]
+
+// Computed
+const today = computed(() => new Date().toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' }))
+
+const shiftLabel = computed(() => {
+  const hour = new Date().getHours()
+  if (hour < 12) return '上午班'
+  if (hour < 18) return '下午班'
+  return '急诊班'
+})
+
+// 患者状态: 0=待缴费, 1=待签到, 2=候诊中, 3=就诊中, 4=已完成, 5=已取消
+const waitingCount = computed(() => patients.value.filter(p => p.status === 1 || p.status === 2).length)
+
+const filteredPatients = computed(() => {
+  if (patientFilter.value === 'all') return patients.value
+  if (patientFilter.value === 'waiting') return patients.value.filter(p => p.status === 1 || p.status === 2)
+  if (patientFilter.value === 'consulting') return patients.value.filter(p => p.status === 3)
+  if (patientFilter.value === 'completed') return patients.value.filter(p => p.status === 4)
+  return patients.value
+})
+
+const getStatusColor = (status) => {
+  const colors = { 0: 'default', 1: 'orange', 2: 'blue', 3: 'processing', 4: 'success', 5: 'default' }
+  return colors[status] || 'default'
+}
+
+const getStatusText = (status) => {
+  const texts = { 0: '待缴费', 1: '待签到', 2: '候诊中', 3: '就诊中', 4: '已完成', 5: '已取消' }
+  return texts[status] || '未知'
+}
+
+// 当前患者信息（用于模板自动填充）
+const currentPatientInfo = computed(() => {
+  if (!currentPatient.value) return {}
+  return {
+    patientName: currentPatient.value.patientName,
+    gender: currentPatient.value.gender,
+    age: currentPatient.value.age,
+    deptName: userStore.userInfo?.deptName || '',
+    regId: currentPatient.value.regId,
+    recordNo: currentPatient.value.regId,
+    visitTime: new Date().toLocaleString('zh-CN')
+  }
+})
 
 // Common lab items for autocomplete
 const commonLabItems = [
@@ -198,25 +437,60 @@ const commonLabItems = [
   { value: '核磁共振(MRI)', price: 600 }
 ]
 
-const onLabSelect = (val, item) => {
-  const match = commonLabItems.find(i => i.value === val)
-  if (match) {
-    item.price = match.price
+// Lifecycle
+onMounted(async () => {
+  await Promise.all([
+    loadPatients(),
+    loadDrugs(),
+    loadTemplates()
+  ])
+  connectWebSocket()
+})
+
+onBeforeUnmount(() => {
+  if (stompClient) {
+    stompClient.deactivate()
+  }
+})
+
+// WebSocket connection
+const connectWebSocket = () => {
+  const deptId = userStore.userInfo?.deptId
+  if (!deptId) return
+
+  try {
+    stompClient = new Client({
+      webSocketFactory: () => new SockJS('/ws'),
+      reconnectDelay: 5000,
+      heartbeatIncoming: 4000,
+      heartbeatOutgoing: 4000
+    })
+
+    stompClient.onConnect = () => {
+      console.log('Doctor workstation WebSocket connected')
+      stompClient.subscribe(`/topic/queue/${deptId}`, (msg) => {
+        console.log('Queue update received:', msg.body)
+        loadPatients()
+      })
+    }
+
+    stompClient.onStompError = (frame) => {
+      console.error('STOMP error', frame)
+    }
+
+    stompClient.activate()
+  } catch (e) {
+    console.error('WebSocket connection failed', e)
   }
 }
 
-onMounted(async () => {
-  loadQueue()
-  loadDrugs()
-  loadTemplates()
-})
-
-const loadQueue = async () => {
+// Methods
+const loadPatients = async () => {
   try {
-    const list = await doctorApi.getQueue(doctorId)
-    queue.value = list
+    patients.value = await doctorApi.getTodayPatients(doctorId)
   } catch (e) {
-    console.error('Failed to load queue', e)
+    console.error('Failed to load patients', e)
+    patients.value = []
   }
 }
 
@@ -230,7 +504,7 @@ const loadDrugs = async () => {
 
 const loadTemplates = async () => {
   try {
-    const deptId = userStore.userInfo.deptId
+    const deptId = userStore.userInfo?.deptId
     templates.value = await emrApi.getTemplates(deptId)
   } catch (e) {
     console.error('Failed to load templates', e)
@@ -238,34 +512,59 @@ const loadTemplates = async () => {
 }
 
 const loadHistory = async (patientId) => {
+  loadingHistory.value = true
   try {
-    const res = await emrApi.getByPatient(patientId)
-    historyRecords.value = res || []
+    historyRecords.value = await doctorApi.getPatientHistory(patientId, doctorId)
   } catch (e) {
     console.error('Failed to load history', e)
     historyRecords.value = []
+  } finally {
+    loadingHistory.value = false
   }
 }
 
 const selectPatient = async (patient) => {
   currentPatient.value = patient
+  mainTab.value = 'emr'
+  
   // Reset form
   Object.assign(emrForm, { symptom: '', diagnosis: '', content: '' })
-  prescriptions.value = []
-  labOrders.value = []
   
-  // Load patient details if needed
-  try {
-    const pInfo = await authApi.getPatient(patient.patientId)
-    if (pInfo) {
-      currentPatient.value = { ...patient, ...pInfo }
-    }
-  } catch (e) {
-    // Ignore if failed
+  // Load existing EMR data if any
+  if (patient.medicalRecord) {
+    emrForm.symptom = patient.medicalRecord.symptom || ''
+    emrForm.diagnosis = patient.medicalRecord.diagnosis || ''
+    emrForm.content = patient.medicalRecord.content || ''
   }
   
-  // Load history
+  // Load prescriptions and lab orders
+  prescriptions.value = (patient.prescriptions || []).map(p => ({
+    presId: p.presId,
+    drugId: p.drugId,
+    quantity: p.quantity,
+    usageInstruction: p.usageInstruction
+  }))
+  
+  labOrders.value = (patient.labOrders || []).map(l => ({
+    orderId: l.orderId,
+    itemName: l.itemName,
+    price: l.price,
+    status: l.status,
+    resultText: l.resultText,
+    resultTime: l.resultTime
+  }))
+  
+  // Load history in background
   loadHistory(patient.patientId)
+}
+
+const viewReport = (lab) => {
+  if (lab.status === 2 && lab.resultText) {
+    currentReport.value = lab
+    reportVisible.value = true
+  } else {
+    message.info('暂无报告内容')
+  }
 }
 
 const callNext = async () => {
@@ -273,16 +572,50 @@ const callNext = async () => {
   try {
     const next = await doctorApi.callNext(doctorId)
     if (next) {
-      message.success("请"+next+"号患者就诊")
-      loadQueue()
-      selectPatient(next)
+      message.success(`请 ${next.queueNumber} 号患者就诊`)
+      await loadPatients()
+      // Find and select the called patient
+      const found = patients.value.find(p => p.regId === next.regId)
+      if (found) {
+        selectPatient(found)
+      }
     } else {
       message.info('暂无候诊患者')
     }
   } catch (e) {
-    message.error('叫号失败')
+    if (e.message !== '当前没有等待的患者') {
+      message.error('叫号失败')
+    }
   } finally {
     calling.value = false
+  }
+}
+
+const pauseCurrentPatient = async () => {
+  if (!currentPatient.value) return
+  try {
+    await doctorApi.pause(currentPatient.value.regId)
+    message.success('已暂停接诊，患者可去做检查')
+    currentPatient.value.status = 2
+    await loadPatients()
+  } catch (e) {
+    message.error('操作失败')
+  }
+}
+
+const resumeCurrentPatient = async () => {
+  if (!currentPatient.value) return
+  try {
+    await doctorApi.resume(currentPatient.value.regId)
+    message.success('已恢复接诊')
+    currentPatient.value.status = 3
+    
+    // Refresh patient detail to get latest lab results
+    const updated = await doctorApi.getVisitDetail(currentPatient.value.regId)
+    selectPatient(updated)
+    await loadPatients()
+  } catch (e) {
+    message.error('操作失败')
   }
 }
 
@@ -294,19 +627,25 @@ const addLabOrder = () => {
   labOrders.value.push({ itemName: '', price: 0 })
 }
 
-// Watch for lab item selection to auto-fill price
-watch(labOrders, (newVal) => {
-  newVal.forEach(item => {
-    const match = commonLabItems.find(i => i.value === item.itemName)
-    if (match && item.price === 0) {
-      item.price = match.price
-    }
-  })
-}, { deep: true })
+const onLabSelect = (val, item) => {
+  const match = commonLabItems.find(i => i.value === val)
+  if (match) {
+    item.price = match.price
+  }
+}
+
+const getLabStatusColor = (status) => {
+  const colors = { 0: 'default', 1: 'processing', 2: 'success' }
+  return colors[status] || 'default'
+}
+
+const getLabStatusText = (status) => {
+  const texts = { 0: '待缴费', 1: '待检查', 2: '已完成' }
+  return texts[status] || '未知'
+}
 
 const applyTemplate = (tpl) => {
   if (tpl.type === 'EMR') {
-    // Parse content if it's JSON, otherwise just text
     try {
       const content = JSON.parse(tpl.content)
       emrForm.symptom = content.symptom || emrForm.symptom
@@ -330,14 +669,338 @@ const saveEmr = async () => {
       regId: currentPatient.value.regId,
       ...emrForm,
       prescriptions: prescriptions.value.filter(p => p.drugId),
-      labOrders: labOrders.value.filter(l => l.itemName)
+      labOrders: labOrders.value.filter(l => l.itemName && !l.orderId) // Only new lab orders
     })
-    message.success('病历保存成功')
+    message.success('保存成功')
+    
+    // Refresh patient detail
+    const updated = await doctorApi.getVisitDetail(currentPatient.value.regId)
+    selectPatient(updated)
   } catch (e) {
     message.error(e.message || '保存失败')
   } finally {
     saving.value = false
   }
+}
+
+// 从电子病历模板保存
+const saveEmrFromTemplate = async () => {
+  if (!currentPatient.value) return
+  
+  saving.value = true
+  try {
+    const templateData = emrTemplateData.value
+    await emrApi.save({
+      regId: currentPatient.value.regId,
+      symptom: templateData.symptom || '',
+      diagnosis: templateData.diagnosis || '',
+      content: [
+        templateData.presentHistory ? `现病史：${templateData.presentHistory}` : '',
+        templateData.pastHistory ? `既往史：${templateData.pastHistory}` : '',
+        templateData.physicalExam ? `查体：${templateData.physicalExam}` : '',
+        templateData.treatment ? `处理：${templateData.treatment}` : ''
+      ].filter(Boolean).join('\n\n'),
+      prescriptions: prescriptions.value.filter(p => p.drugId),
+      labOrders: labOrders.value.filter(l => l.itemName && !l.orderId)
+    })
+    message.success('保存成功')
+    
+    const updated = await doctorApi.getVisitDetail(currentPatient.value.regId)
+    selectPatient(updated)
+  } catch (e) {
+    message.error(e.message || '保存失败')
+  } finally {
+    saving.value = false
+  }
+}
+
+// 打印病历
+const printEmr = () => {
+  handleEmrPrint(emrTemplateData.value)
+}
+
+const handleEmrPrint = (data) => {
+  const printWindow = window.open('', '_blank')
+  printWindow.document.write(generateEmrHtml(data))
+  printWindow.document.close()
+  printWindow.focus()
+  setTimeout(() => {
+    printWindow.print()
+    printWindow.close()
+  }, 300)
+}
+
+// 打印处方
+const printPrescription = () => {
+  if (prescriptions.value.length === 0) {
+    message.warning('暂无处方可打印')
+    return
+  }
+  
+  const prescriptionItems = prescriptions.value.map(p => {
+    const drug = drugs.value.find(d => d.drugId === p.drugId)
+    return {
+      drugName: drug?.name || '未知药品',
+      spec: drug?.spec || '',
+      price: drug?.price || 0,
+      quantity: p.quantity,
+      unit: drug?.unit || '盒',
+      usageInstruction: p.usageInstruction || ''
+    }
+  })
+  
+  const printWindow = window.open('', '_blank')
+  printWindow.document.write(generatePrescriptionHtml(prescriptionItems))
+  printWindow.document.close()
+  printWindow.focus()
+  setTimeout(() => {
+    printWindow.print()
+    printWindow.close()
+  }, 300)
+}
+
+// 打印检查申请单
+const printLabOrders = () => {
+  if (labOrders.value.length === 0) {
+    message.warning('暂无检查项目可打印')
+    return
+  }
+  
+  const printWindow = window.open('', '_blank')
+  printWindow.document.write(generateLabHtml(labOrders.value))
+  printWindow.document.close()
+  printWindow.focus()
+  setTimeout(() => {
+    printWindow.print()
+    printWindow.close()
+  }, 300)
+}
+
+// 生成病历打印HTML
+const generateEmrHtml = (data) => {
+  const now = new Date()
+  return `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>门诊病历</title>
+<style>
+  @page { margin: 15mm; size: A4; }
+  body { font-family: 'SimSun', '宋体', serif; font-size: 12pt; line-height: 1.8; }
+  .paper { max-width: 210mm; margin: 0 auto; }
+  .header { text-align: center; margin-bottom: 20px; }
+  .header h1 { font-size: 22pt; margin: 0 0 10px 0; }
+  .header h2 { font-size: 16pt; margin: 0; letter-spacing: 5px; }
+  hr { border: none; border-top: 1px solid #333; margin: 10px 0; }
+  .info-row { margin: 8px 0; }
+  .info-row span { margin-right: 20px; }
+  .info-row u { text-decoration: none; border-bottom: 1px solid #333; padding: 0 10px; }
+  .block { margin: 15px 0; }
+  .block-title { font-weight: bold; margin-bottom: 5px; }
+  .block-content { padding-left: 20px; white-space: pre-wrap; }
+  .diagnosis { color: #c00; font-weight: bold; }
+  .signature { margin-top: 30px; padding-top: 15px; border-top: 1px solid #ccc; }
+</style></head><body>
+<div class="paper">
+  <div class="header">
+    <h1>清远友谊医院</h1>
+    <h2>门 诊 病 历</h2>
+  </div>
+  <div class="info-row">
+    <span>科室：<u>${data.deptName || userStore.userInfo?.deptName || ''}</u></span>
+    <span>门诊号：<u>${currentPatient.value?.regId || ''}</u></span>
+  </div>
+  <hr />
+  <div class="info-row">
+    <span>姓名：<u>${data.patientName || currentPatient.value?.patientName || ''}</u></span>
+    <span>性别：${(data.gender ?? currentPatient.value?.gender) === 1 ? '男' : '女'}</span>
+    <span>年龄：<u>${data.age || currentPatient.value?.age || ''}</u>岁</span>
+  </div>
+  <div class="info-row">
+    <span>就诊时间：<u>${data.visitTime || now.toLocaleString('zh-CN')}</u></span>
+  </div>
+  <hr />
+  <div class="block">
+    <div class="block-title">主 诉</div>
+    <div class="block-content">${data.symptom || emrForm.symptom || '-'}</div>
+  </div>
+  <div class="block">
+    <div class="block-title">现病史</div>
+    <div class="block-content">${data.presentHistory || emrForm.content || '-'}</div>
+  </div>
+  <div class="block">
+    <div class="block-title diagnosis">诊 断</div>
+    <div class="block-content diagnosis">${data.diagnosis || emrForm.diagnosis || '-'}</div>
+  </div>
+  <div class="block">
+    <div class="block-title">处 理</div>
+    <div class="block-content">${data.treatment || '-'}</div>
+  </div>
+  <div class="signature">
+    <span>医师签名：${data.doctorName || userStore.userInfo?.realName || ''}</span>
+    <span style="margin-left: 50px">日期：${now.toLocaleDateString('zh-CN')}</span>
+  </div>
+</div>
+</body></html>`
+}
+
+// 生成处方笺打印HTML
+const generatePrescriptionHtml = (items) => {
+  const now = new Date()
+  const dateStr = `${now.getFullYear()}年${now.getMonth() + 1}月${now.getDate()}日`
+  const total = items.reduce((sum, item) => sum + (item.price || 0) * (item.quantity || 1), 0)
+  
+  const drugListHtml = items.map((item, idx) => `
+    <div class="drug-item">
+      <span class="drug-index">${idx + 1}.</span>
+      <span class="drug-name">${item.drugName}</span>
+      <span class="drug-spec">${item.spec}</span>
+      <span class="drug-quantity">× ${item.quantity}${item.unit}</span>
+      <div class="drug-usage">用法：${item.usageInstruction || '遵医嘱'}</div>
+    </div>
+  `).join('')
+  
+  return `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>处方笺</title>
+<style>
+  @page { margin: 10mm; size: A5; }
+  body { font-family: 'SimSun', '宋体', serif; font-size: 11pt; margin: 0; padding: 10mm; }
+  .paper { background: #c8f7c5; padding: 15px; border: 2px solid #333; }
+  .header { text-align: center; margin-bottom: 10px; position: relative; }
+  .dept-label { position: absolute; right: 10px; top: 0; font-size: 12pt; }
+  .hospital-name { font-size: 16pt; margin: 0 0 5px 0; }
+  .doc-title { font-size: 14pt; margin: 0; }
+  .fee-row { margin: 5px 0; font-size: 10pt; }
+  .fee-row label { margin-right: 10px; }
+  .info-row { margin: 5px 0; }
+  .field-item { margin-right: 15px; }
+  .field-item u { text-decoration: none; border-bottom: 1px solid #000; padding: 0 8px; }
+  .rx-section { margin: 10px 0; min-height: 150px; border: 1px solid #333; padding: 10px; background: #fff; }
+  .rx-header { font-size: 20pt; font-family: 'Times New Roman', serif; margin-bottom: 8px; }
+  .drug-item { margin: 8px 0; }
+  .drug-index { margin-right: 5px; }
+  .drug-name { font-weight: bold; margin-right: 8px; }
+  .drug-spec { margin-right: 8px; color: #666; }
+  .drug-quantity { margin-left: 15px; }
+  .drug-usage { margin-left: 20px; color: #666; font-size: 10pt; }
+  .signature { margin-top: 10px; padding-top: 10px; border-top: 1px solid #333; }
+  .sig-row { margin: 8px 0; display: flex; justify-content: space-between; }
+</style></head><body>
+<div class="paper">
+  <div class="header">
+    <div class="dept-label">${userStore.userInfo?.deptName || ''}</div>
+    <div class="hospital-name">清远友谊医院</div>
+    <div class="doc-title">处 方 笺</div>
+  </div>
+  <div class="fee-row">
+    <span>费别：</span>
+    <label>☐ 公费</label>
+    <label>☑ 自费</label>
+    <label>☐ 农合</label>
+    <label>☐ 医保</label>
+    <label>☐ 其他</label>
+    <span class="field-item" style="float:right">处方编号：<u>${currentPatient.value?.regId || ''}</u></span>
+  </div>
+  <div class="info-row">
+    <span class="field-item">姓名：<u>${currentPatient.value?.patientName || ''}</u></span>
+    <span class="field-item">性别：${currentPatient.value?.gender === 1 ? '男' : '女'}</span>
+    <span class="field-item">年龄：<u>${currentPatient.value?.age || ''}</u>岁</span>
+    <span class="field-item">日期：<u>${dateStr}</u></span>
+  </div>
+  <div class="info-row">
+    <span class="field-item">临床诊断：<u>${emrForm.diagnosis || emrTemplateData.value?.diagnosis || '____'}</u></span>
+  </div>
+  <div class="rx-section">
+    <div class="rx-header">Rp</div>
+    ${drugListHtml}
+  </div>
+  <div class="signature">
+    <div class="sig-row">
+      <span>医师：<u>${userStore.userInfo?.realName || ''}</u></span>
+      <span>药品金额：<u>¥${total.toFixed(2)}</u></span>
+    </div>
+    <div class="sig-row">
+      <span>审核药师：________</span>
+      <span>调配药师：________</span>
+      <span>发药药师：________</span>
+    </div>
+  </div>
+</div>
+</body></html>`
+}
+
+// 生成检查申请单打印HTML
+const generateLabHtml = (items) => {
+  const now = new Date()
+  const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+  const total = items.reduce((sum, item) => sum + (item.price || 0), 0)
+  
+  const itemsHtml = items.map((item, idx) => `
+    <tr>
+      <td>${idx + 1}</td>
+      <td>${item.itemName}</td>
+      <td>¥${item.price || 0}</td>
+      <td>${getLabStatusText(item.status)}</td>
+    </tr>
+  `).join('')
+  
+  return `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>检查申请单</title>
+<style>
+  @page { margin: 15mm; size: A5; }
+  body { font-family: 'SimSun', '宋体', serif; font-size: 11pt; }
+  .paper { max-width: 148mm; margin: 0 auto; border: 1px solid #333; padding: 15px; }
+  .header { text-align: center; margin-bottom: 15px; }
+  .header h1 { font-size: 16pt; margin: 0 0 8px 0; }
+  .header h2 { font-size: 14pt; margin: 0; }
+  .info-table { width: 100%; border-collapse: collapse; margin: 10px 0; }
+  .info-table td { padding: 5px; border: 1px solid #333; }
+  .items-table { width: 100%; border-collapse: collapse; margin: 10px 0; }
+  .items-table th, .items-table td { padding: 6px; border: 1px solid #333; text-align: center; }
+  .items-table th { background: #f0f0f0; }
+  .signature { margin-top: 15px; }
+</style></head><body>
+<div class="paper">
+  <div class="header">
+    <h1>清远友谊医院</h1>
+    <h2>检查/检验申请单</h2>
+  </div>
+  <table class="info-table">
+    <tr>
+      <td>姓名：${currentPatient.value?.patientName || ''}</td>
+      <td>性别：${currentPatient.value?.gender === 1 ? '男' : '女'}</td>
+      <td>年龄：${currentPatient.value?.age || ''}岁</td>
+      <td>门诊号：${currentPatient.value?.regId || ''}</td>
+    </tr>
+    <tr>
+      <td colspan="2">科室：${userStore.userInfo?.deptName || ''}</td>
+      <td colspan="2">申请日期：${dateStr}</td>
+    </tr>
+    <tr>
+      <td colspan="4">临床诊断：${emrForm.diagnosis || emrTemplateData.value?.diagnosis || '-'}</td>
+    </tr>
+  </table>
+  <h3 style="margin: 10px 0 5px 0; font-size: 12pt;">检查项目</h3>
+  <table class="items-table">
+    <thead>
+      <tr>
+        <th width="50">序号</th>
+        <th>项目名称</th>
+        <th width="80">单价</th>
+        <th width="80">状态</th>
+      </tr>
+    </thead>
+    <tbody>${itemsHtml}</tbody>
+    <tfoot>
+      <tr>
+        <td colspan="2" style="text-align: right">合计：</td>
+        <td colspan="2">¥${total.toFixed(2)}</td>
+      </tr>
+    </tfoot>
+  </table>
+  <div class="signature">
+    <span>开单医生：${userStore.userInfo?.realName || ''}</span>
+    <span style="margin-left: 30px">日期：${dateStr}</span>
+  </div>
+</div>
+</body></html>`
 }
 
 const completeVisit = async () => {
@@ -346,20 +1009,10 @@ const completeVisit = async () => {
     await doctorApi.complete(currentPatient.value.regId)
     message.success('就诊完成')
     currentPatient.value = null
-    loadQueue()
+    await loadPatients()
   } catch (e) {
     message.error('操作失败')
   }
-}
-
-const getStatusText = (status) => {
-  const map = { 1: '待就诊', 2: '候诊中', 3: '就诊中' }
-  return map[status] || '未知'
-}
-
-const formatDate = (str) => {
-  if (!str) return ''
-  return new Date(str).toLocaleDateString()
 }
 </script>
 
@@ -368,188 +1021,378 @@ const formatDate = (str) => {
   height: 100%;
   display: flex;
   flex-direction: column;
-  padding: 10px;
+  background: #f0f2f5;
+  padding: 12px;
   box-sizing: border-box;
-
-  .workstation-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 10px;
-    
-    h2 {
-      margin: 0;
-      font-size: 18px;
-    }
-  }
   
   .workstation-content {
     flex: 1;
     display: flex;
-    gap: 10px;
+    gap: 12px;
     overflow: hidden;
   }
 
   .left-panel {
-    width: 20%;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
+    width: 240px;
+    flex-shrink: 0;
   }
 
   .middle-panel {
-    width: 50%;
+    flex: 1;
     display: flex;
     flex-direction: column;
+    gap: 12px;
+    overflow: hidden;
   }
 
   .right-panel {
-    width: 30%;
-    display: flex;
-    flex-direction: column;
-    background: #fff;
-    border-radius: 4px;
-    overflow: hidden;
+    width: 200px;
+    flex-shrink: 0;
   }
 
   .panel-card {
     background: #fff;
-    border-radius: 4px;
+    border-radius: 6px;
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    box-shadow: 0 1px 4px rgba(0,0,0,0.05);
-
-    &.queue-panel {
-      flex: 2;
-    }
-    &.patient-info-panel {
-      flex: 1;
-    }
-    &.emr-editor {
-      height: 100%;
-    }
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    height: 100%;
 
     .panel-header {
-      padding: 10px 15px;
-      background: #f5f7fa;
-      border-bottom: 1px solid #e4e7ed;
-      font-weight: bold;
+      padding: 12px 16px;
+      background: #fafafa;
+      border-bottom: 1px solid #f0f0f0;
+      font-weight: 600;
       display: flex;
       justify-content: space-between;
       align-items: center;
-    }
-  }
-
-  .queue-list {
-    flex: 1;
-    overflow-y: auto;
-    padding: 5px;
-
-    .queue-item {
-      display: flex;
-      align-items: center;
-      padding: 8px;
-      border-radius: 4px;
-      cursor: pointer;
-      margin-bottom: 5px;
+      flex-shrink: 0;
       
-      &:hover {
-        background: #f0f9eb;
-      }
-      &.current {
-        background: #ecf5ff;
-        border-left: 3px solid #409eff;
-      }
-
-      .number {
-        font-size: 16px;
-        font-weight: bold;
-        width: 30px;
-        color: #409eff;
-      }
-      .info {
-        flex: 1;
-        .name { font-weight: 500; }
-        .status { font-size: 12px; color: #909399; }
+      .header-title {
+        display: flex;
+        align-items: center;
+        gap: 8px;
       }
     }
   }
 
-  .info-content {
-    padding: 15px;
-    p {
-      margin: 5px 0;
-      font-size: 14px;
+  // Patient List
+  .patient-list-panel {
+    .patient-filter {
+      padding: 8px 12px;
+      border-bottom: 1px solid #f0f0f0;
     }
-  }
-
-  .emr-form-container {
-    flex: 1;
-    overflow-y: auto;
-    padding: 15px;
     
-    .emr-actions {
-      margin-top: 20px;
-      display: flex;
-      justify-content: flex-end;
-    }
-  }
-
-  .tools-tabs {
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-    border: none;
-    
-    :deep(.ant-tabs-content) {
+    .patient-list {
       flex: 1;
       overflow-y: auto;
-      padding: 10px;
-    }
-  }
-
-  .tool-content {
-    .drug-item, .lab-item {
-      background: #f8f9fa;
       padding: 8px;
-      border-radius: 4px;
-      margin-bottom: 8px;
+    }
+    
+    .patient-empty {
+      text-align: center;
+      color: #999;
+      padding: 20px;
+    }
+    
+    .patient-item {
+      display: flex;
+      align-items: center;
+      padding: 10px;
+      border-radius: 6px;
+      cursor: pointer;
+      margin-bottom: 6px;
+      border: 1px solid #f0f0f0;
+      transition: all 0.2s;
       
-      .drug-row, .lab-row {
+      &:hover {
+        background: #f5f7fa;
+        border-color: #e0e0e0;
+      }
+      
+      &.current {
+        background: #e6f7ff;
+        border-color: #1890ff;
+      }
+      
+      &.in-consultation {
+        border-left: 3px solid #1890ff;
+      }
+      
+      &.waiting {
+        border-left: 3px solid #faad14;
+      }
+      
+      &.completed {
+        opacity: 0.7;
+        border-left: 3px solid #52c41a;
+      }
+      
+      .patient-number {
+        width: 28px;
+        height: 28px;
+        background: #f0f0f0;
+        border-radius: 50%;
         display: flex;
-        gap: 5px;
-        margin-bottom: 5px;
-        &:last-child { margin-bottom: 0; }
+        align-items: center;
+        justify-content: center;
+        font-weight: 600;
+        font-size: 12px;
+        margin-right: 10px;
+        flex-shrink: 0;
+      }
+      
+      .patient-info {
+        flex: 1;
+        min-width: 0;
+        
+        .name {
+          font-weight: 500;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        
+        .meta {
+          font-size: 12px;
+          color: #999;
+          
+          span + span::before {
+            content: ' · ';
+          }
+        }
+      }
+      
+      .patient-status {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        align-items: flex-end;
       }
     }
   }
-
-  .history-list {
-    padding: 10px;
-    .history-card {
-      margin-bottom: 5px;
-      h4 { margin: 0 0 5px 0; font-size: 14px; }
-      p { margin: 0; font-size: 12px; color: #666; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  
+  // Action Header
+  .action-header {
+    background: #fff;
+    padding: 12px 20px;
+    border-radius: 6px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    flex-shrink: 0;
+    
+    .patient-basic {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      
+      .name {
+        font-size: 18px;
+        font-weight: 600;
+      }
+      
+      .meta {
+        color: #666;
+      }
     }
-    .empty-text {
-      text-align: center;
-      color: #909399;
-      margin-top: 20px;
+    
+    .actions {
+      display: flex;
+      gap: 8px;
     }
   }
-
-  .template-list {
+  
+  // Content Card
+  .content-card {
+    flex: 1;
+    overflow: hidden;
+    
+    .workspace-tabs {
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      
+      :deep(.ant-tabs-nav) {
+        margin-bottom: 0;
+        background: #fafafa;
+        padding: 8px 8px 0 8px;
+      }
+      
+      :deep(.ant-tabs-content) {
+        flex: 1;
+        overflow: hidden;
+        
+        .ant-tabs-tabpane {
+          height: 100%;
+          overflow-y: auto;
+          padding: 0;
+        }
+      }
+    }
+    
+    .tab-content {
+      padding: 20px;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      
+      .emr-form {
+        max-width: 800px;
+        margin: 0 auto;
+        width: 100%;
+      }
+      
+      .emr-mode-switch {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 16px;
+        padding-bottom: 12px;
+        border-bottom: 1px solid #f0f0f0;
+      }
+      
+      .section-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 16px;
+        font-weight: 600;
+        font-size: 15px;
+        
+        .header-actions {
+          display: flex;
+          gap: 8px;
+        }
+      }
+      
+      .lab-list, .prescription-list {
+        flex: 1;
+        overflow-y: auto;
+        border: 1px solid #f0f0f0;
+        border-radius: 4px;
+        padding: 12px;
+        background: #fafafa;
+      }
+      
+      .lab-item {
+        background: #fff;
+        padding: 12px;
+        border-radius: 4px;
+        margin-bottom: 8px;
+        border: 1px solid #e8e8e8;
+        
+        .lab-row {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          
+          .lab-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            
+            .price {
+              color: #ff4d4f;
+              font-weight: 500;
+            }
+          }
+          
+          .lab-status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+          }
+        }
+      }
+      
+      .form-actions {
+        margin-top: 20px;
+        display: flex;
+        justify-content: center;
+        padding-top: 16px;
+        border-top: 1px solid #f0f0f0;
+      }
+    }
+  }
+  
+  .history-content {
+    padding: 16px;
+    
+    .empty-tip {
+      color: #999;
+      text-align: center;
+      padding: 20px;
+    }
+    
+    .history-header {
+      display: flex;
+      gap: 16px;
+      
+      .date {
+        color: #1890ff;
+        font-weight: 500;
+      }
+      
+      .diagnosis {
+        color: #666;
+      }
+    }
+    
+    .history-detail {
+      .detail-row {
+        margin-bottom: 8px;
+        
+        label {
+          color: #999;
+          margin-right: 8px;
+        }
+        
+        .sub-list {
+          margin-top: 4px;
+          padding-left: 16px;
+          color: #666;
+          font-size: 13px;
+        }
+      }
+    }
+  }
+  
+  // Template Panel
+  .template-panel {
+    .template-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px;
+      
+      .empty-tip {
+        color: #999;
+        text-align: center;
+        padding: 20px;
+        font-size: 13px;
+      }
+    }
+    
     .template-item {
-      padding: 10px;
-      border-bottom: 1px solid #eee;
-      cursor: pointer;
       display: flex;
       justify-content: space-between;
       align-items: center;
+      padding: 10px;
+      border-radius: 4px;
+      cursor: pointer;
+      border: 1px solid #f0f0f0;
+      margin-bottom: 6px;
       
-      &:hover { background: #f5f7fa; }
-      .tpl-name { font-size: 14px; }
+      &:hover {
+        background: #f5f7fa;
+        border-color: #1890ff;
+      }
+      
+      .tpl-name {
+        font-size: 13px;
+      }
     }
   }
   
@@ -559,7 +1402,7 @@ const formatDate = (str) => {
     align-items: center;
     justify-content: center;
     background: #fff;
-    border-radius: 4px;
+    border-radius: 6px;
   }
 }
 </style>

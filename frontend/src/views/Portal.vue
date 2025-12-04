@@ -10,7 +10,7 @@
       </div>
       
       <div class="entries-grid">
-        <div class="entry-card" @click=".push('/patient')">
+        <div class="entry-card" @click="router.push('/patient')">
           <div class="icon-wrapper patient">
             <UserOutlined style="font-size: 1em;"/>
           </div>
@@ -23,7 +23,7 @@
           </div>
         </div>
         
-        <div class="entry-card" @click=".push('/doctor/login')">
+        <div class="entry-card" @click="router.push('/doctor/login')">
           <div class="icon-wrapper doctor">
             <MedicineBoxOutlined style="font-size: 1em;"/>
           </div>
@@ -36,7 +36,7 @@
           </div>
         </div>
         
-        <div class="entry-card" @click=".push('/lab/login')">
+        <div class="entry-card" @click="router.push('/lab/login')">
           <div class="icon-wrapper lab">
             <ExperimentOutlined style="font-size: 1em;"/>
           </div>
@@ -49,7 +49,7 @@
           </div>
         </div>
         
-        <div class="entry-card" @click=".push('/pharmacy/login')">
+        <div class="entry-card" @click="router.push('/pharmacy/login')">
           <div class="icon-wrapper pharmacy">
             <ShopOutlined style="font-size: 1em;"/>
           </div>
@@ -62,7 +62,7 @@
           </div>
         </div>
         
-        <div class="entry-card" @click=".push('/admin/login')">
+        <div class="entry-card" @click="router.push('/admin/login')">
           <div class="icon-wrapper admin">
             <SettingOutlined style="font-size: 1em;"/>
           </div>
@@ -126,10 +126,7 @@ const departments = ref([])
 
 onMounted(async () => {
   try {
-    const res = await scheduleApi.getDepartments()
-    if (res.code === 200) {
-      departments.value = res.data
-    }
+    departments.value = await scheduleApi.getDepartments()
   } catch (error) {
     console.error('Failed to load departments:', error)
   }
@@ -137,7 +134,7 @@ onMounted(async () => {
 
 const openScreen = () => {
   if (selectedDept.value) {
-    router.push(/screen/)
+    router.push(`/screen/${selectedDept.value}`)
   }
 }
 </script>

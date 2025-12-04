@@ -9,8 +9,9 @@
         <a-menu-item key="dashboard"><template #icon><DashboardOutlined /></template><span>仪表盘</span></a-menu-item>
         <a-menu-item key="users"><template #icon><UserOutlined /></template><span>用户管理</span></a-menu-item>
         <a-menu-item key="departments"><template #icon><BankOutlined /></template><span>科室管理</span></a-menu-item>
+        <a-menu-item key="rooms"><template #icon><HomeOutlined /></template><span>诊室管理</span></a-menu-item>
         <a-menu-item key="schedules"><template #icon><CalendarOutlined /></template><span>排班管理</span></a-menu-item>
-        <a-menu-item key="audit"><template #icon><FileTextOutlined /></template><span>审计日志</span></a-menu-item>
+        <a-menu-item key="query"><template #icon><SearchOutlined /></template><span>数据查询</span></a-menu-item>
       </a-menu>
       <div class="logout" @click="logout"><LogoutOutlined /> 退出登录</div>
     </div>
@@ -21,7 +22,7 @@
 <script setup>
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { DashboardOutlined, UserOutlined, BankOutlined, CalendarOutlined, FileTextOutlined, LogoutOutlined, SettingOutlined } from '@ant-design/icons-vue'
+import { DashboardOutlined, UserOutlined, BankOutlined, CalendarOutlined, SearchOutlined, LogoutOutlined, SettingOutlined, HomeOutlined } from '@ant-design/icons-vue'
 import { useUserStore } from '@/stores/user'
 
 const route = useRoute()
@@ -29,10 +30,10 @@ const router = useRouter()
 const userStore = useUserStore()
 const isLoggedIn = computed(() => userStore.isLoggedIn && route.name !== 'AdminLogin')
 const activeMenu = computed(() => {
-  const map = { 'Dashboard': 'dashboard', 'Users': 'users', 'Departments': 'departments', 'Schedules': 'schedules', 'Audit': 'audit' }
+  const map = { 'Dashboard': 'dashboard', 'Users': 'users', 'Departments': 'departments', 'Rooms': 'rooms', 'Schedules': 'schedules', 'DataQuery': 'query' }
   return map[route.name] || 'dashboard'
 })
-const handleMenuSelect = ({ key }) => router.push(/admin/)
+const handleMenuSelect = ({ key }) => router.push(`/admin/${key}`)
 const logout = () => { userStore.logout(); router.push('/admin/login') }
 </script>
 
@@ -79,13 +80,21 @@ const logout = () => { userStore.logout(); router.push('/admin/login') }
       border: none; 
       background: transparent; 
       padding: 16px 0;
+      overflow: hidden;
       
       .ant-menu-item { 
         height: 50px;
         line-height: 50px;
         margin: 4px 16px;
         border-radius: var(--radius-md);
-        color: var(--text-secondary); 
+        color: var(--text-secondary);
+        overflow: hidden;
+        
+        .ant-menu-title-content {
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        } 
         
         &:hover { 
           background: var(--bg-body); 

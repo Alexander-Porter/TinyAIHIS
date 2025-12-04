@@ -23,6 +23,7 @@ const routes = [
       { path: 'checkin', name: 'CheckIn', component: () => import('@/views/patient/CheckIn.vue') },
       { path: 'reports', name: 'Reports', component: () => import('@/views/patient/Reports.vue') },
       { path: 'records', name: 'Records', component: () => import('@/views/patient/Records.vue') },
+      { path: 'registration-records', name: 'RegistrationRecords', component: () => import('@/views/patient/RegistrationRecords.vue') },
     ]
   },
   
@@ -71,8 +72,9 @@ const routes = [
       { path: 'dashboard', name: 'Dashboard', component: () => import('@/views/admin/Dashboard.vue') },
       { path: 'users', name: 'Users', component: () => import('@/views/admin/Users.vue') },
       { path: 'departments', name: 'Departments', component: () => import('@/views/admin/Departments.vue') },
+      { path: 'rooms', name: 'Rooms', component: () => import('@/views/admin/Rooms.vue') },
       { path: 'schedules', name: 'Schedules', component: () => import('@/views/admin/Schedules.vue') },
-      { path: 'audit', name: 'Audit', component: () => import('@/views/admin/Audit.vue') },
+      { path: 'query', name: 'DataQuery', component: () => import('@/views/admin/DataQuery.vue') },
     ]
   },
   

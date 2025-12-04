@@ -47,6 +47,18 @@ CREATE TABLE IF NOT EXISTS department (
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 
+-- Consulting Room Table (诊室表)
+CREATE TABLE IF NOT EXISTS consulting_room (
+    room_id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    room_name VARCHAR(100) NOT NULL COMMENT 'e.g. 1号诊室',
+    room_code VARCHAR(50) COMMENT 'Room code for display',
+    location VARCHAR(255) COMMENT 'e.g. 门诊楼1楼A区',
+    description TEXT,
+    status INT DEFAULT 1 COMMENT '0-disabled, 1-enabled',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
 -- Drug Dictionary Table
 CREATE TABLE IF NOT EXISTS drug_dict (
     drug_id BIGINT PRIMARY KEY AUTO_INCREMENT,
@@ -61,16 +73,45 @@ CREATE TABLE IF NOT EXISTS drug_dict (
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 
+-- Check Item Table (检查项目)
+CREATE TABLE IF NOT EXISTS check_item (
+    item_id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    item_name VARCHAR(200) NOT NULL,
+    item_code VARCHAR(50),
+    price DECIMAL(10,2) NOT NULL,
+    category VARCHAR(100),
+    description TEXT,
+    status INT DEFAULT 1,
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
 -- Doctor Schedule Table (with optimistic locking for flash sale protection)
 CREATE TABLE IF NOT EXISTS schedule (
     schedule_id BIGINT PRIMARY KEY AUTO_INCREMENT,
     doctor_id BIGINT NOT NULL,
+    dept_id BIGINT NOT NULL COMMENT 'Department ID',
+    room_id BIGINT COMMENT 'Consulting room ID',
     schedule_date DATE NOT NULL,
-    shift_type VARCHAR(10) NOT NULL COMMENT 'AM or PM',
+    shift_type VARCHAR(10) NOT NULL COMMENT 'AM, PM or ER',
     max_quota INT DEFAULT 30 COMMENT 'Maximum appointments allowed for this shift',
     current_count INT DEFAULT 0 COMMENT 'Current booked appointment count',
     status INT DEFAULT 1,
     version INT DEFAULT 0 COMMENT 'Optimistic lock version for preventing overselling',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
+-- Schedule Template Table (weekly recurring patterns)
+CREATE TABLE IF NOT EXISTS schedule_template (
+    template_id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    dept_id BIGINT NOT NULL COMMENT 'Department ID',
+    doctor_id BIGINT NOT NULL COMMENT 'Doctor ID',
+    room_id BIGINT COMMENT 'Default consulting room ID',
+    day_of_week INT NOT NULL COMMENT '0=Monday, 1=Tuesday, ..., 6=Sunday',
+    shift_type VARCHAR(10) NOT NULL COMMENT 'AM, PM or ER',
+    max_quota INT DEFAULT 30 COMMENT 'Maximum appointments per shift',
+    status INT DEFAULT 1 COMMENT '1=active, 0=inactive',
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
@@ -161,6 +202,18 @@ INSERT INTO department (dept_name, location, screen_id, description, status) VAL
 ('检验科', '医技楼1楼', NULL, '检验科', 1),
 ('药房', '门诊楼1楼', NULL, '门诊药房', 1);
 
+-- Insert consulting rooms
+INSERT INTO consulting_room (room_name, room_code, location, description, status) VALUES
+('内科1号诊室', 'NK-01', '门诊楼1楼A区', '内科普通诊室', 1),
+('内科2号诊室', 'NK-02', '门诊楼1楼A区', '内科专家诊室', 1),
+('内科3号诊室', 'NK-03', '门诊楼1楼A区', '内科急诊诊室', 1),
+('外科1号诊室', 'WK-01', '门诊楼2楼B区', '外科普通诊室', 1),
+('外科2号诊室', 'WK-02', '门诊楼2楼B区', '外科专家诊室', 1),
+('儿科1号诊室', 'EK-01', '门诊楼1楼C区', '儿科诊室', 1),
+('妇产科1号诊室', 'FK-01', '门诊楼3楼D区', '妇产科诊室', 1),
+('急诊1号诊室', 'JZ-01', '急诊楼1楼', '急诊室', 1),
+('急诊2号诊室', 'JZ-02', '急诊楼1楼', '急诊室', 1);
+
 -- Insert sample doctors (password: doctor123)
 INSERT INTO sys_user (username, password, real_name, role, dept_id, phone, status) VALUES
 ('zhang_chief', '$2b$12$oZWQgp6WlFlRQ0QxoX5mEOYWMCZYEaicJKNyDkZK9C1It6XYslhsa', '张主任', 'CHIEF', 1, '13800138001', 1),
@@ -181,20 +234,44 @@ INSERT INTO drug_dict (name, spec, price, stock_quantity, unit, manufacturer, st
 ('氨氯地平片', '5mg*28片', 45.00, 300, '盒', '辉瑞制药', 1),
 ('二甲双胍缓释片', '0.5g*30片', 22.00, 500, '盒', '中美合资', 1);
 
--- Insert sample schedules for the next 7 days
-INSERT INTO schedule (doctor_id, schedule_date, shift_type, max_quota, current_count, status, version) VALUES
-(2, CURDATE(), 'AM', 30, 0, 1, 0),
-(2, CURDATE(), 'PM', 25, 0, 1, 0),
-(3, CURDATE(), 'AM', 20, 0, 1, 0),
-(4, CURDATE(), 'PM', 30, 0, 1, 0),
-(5, CURDATE(), 'AM', 25, 0, 1, 0),
-(2, DATE_ADD(CURDATE(), INTERVAL 1 DAY), 'AM', 30, 0, 1, 0),
-(3, DATE_ADD(CURDATE(), INTERVAL 1 DAY), 'PM', 20, 0, 1, 0),
-(4, DATE_ADD(CURDATE(), INTERVAL 2 DAY), 'AM', 30, 0, 1, 0),
-(5, DATE_ADD(CURDATE(), INTERVAL 2 DAY), 'PM', 25, 0, 1, 0);
+-- Insert sample check items
+INSERT INTO check_item (item_name, item_code, price, category, description, status) VALUES
+('血常规', 'XCG001', 20.00, '检验', '血液常规检查', 1),
+('尿常规', 'NCG001', 15.00, '检验', '尿液常规检查', 1),
+('肝功能', 'GGN001', 80.00, '检验', '肝功能全项', 1),
+('肾功能', 'SGN001', 60.00, '检验', '肾功能全项', 1),
+('心电图', 'XDT001', 30.00, '检查', '常规心电图', 1),
+('胸部CT', 'XCT001', 280.00, '影像', '胸部CT平扫', 1),
+('腹部B超', 'FBC001', 120.00, '影像', '腹部B超检查', 1),
+('核磁共振(MRI)', 'MRI001', 600.00, '影像', '核磁共振检查', 1);
 
 -- Insert sample EMR templates
 INSERT INTO emr_template (dept_id, creator_id, name, content, type, status) VALUES
 (1, 2, '感冒发热模板', '主诉: 发热、咳嗽3天\n现病史: 患者3天前出现发热、咳嗽症状，体温38.5°C\n既往史: 无特殊\n查体: T38.5°C，咽部充血\n诊断: 急性上呼吸道感染\n处理: 对症治疗', 'EMR', 1),
 (1, 2, '高血压复诊模板', '主诉: 血压控制情况复诊\n现病史: 患者长期服用降压药，血压控制平稳\n查体: BP 130/85mmHg\n诊断: 高血压病\n处理: 继续原方案治疗', 'EMR', 1),
 (2, 4, '外科术后复查模板', '主诉: 术后复查\n现病史: 术后恢复良好\n查体: 切口愈合良好，无红肿渗出\n处理: 继续观察', 'EMR', 1);
+
+-- Insert sample schedule templates (weekly recurring patterns)
+-- 张主任(user_id=2) 内科(dept_id=1): 周一AM/PM, 周三AM, 周五PM, 每天急诊
+-- 李医生(user_id=3) 内科(dept_id=1): 周二AM, 周四PM
+-- 王主任(user_id=4) 外科(dept_id=2): 周一PM, 周三PM, 周五AM
+-- 赵医生(user_id=5) 外科(dept_id=2): 周二PM, 周四AM
+INSERT INTO schedule_template (dept_id, doctor_id, room_id, day_of_week, shift_type, max_quota, status) VALUES
+(1, 2, 2, 0, 'AM', 30, 1),
+(1, 2, 2, 0, 'PM', 25, 1),
+(1, 2, 3, 0, 'ER', 50, 1),
+(1, 2, 3, 1, 'ER', 50, 1),
+(1, 2, 2, 2, 'AM', 30, 1),
+(1, 2, 3, 2, 'ER', 50, 1),
+(1, 2, 3, 3, 'ER', 50, 1),
+(1, 2, 2, 4, 'PM', 25, 1),
+(1, 2, 3, 4, 'ER', 50, 1),
+(1, 2, 3, 5, 'ER', 50, 1),
+(1, 2, 3, 6, 'ER', 50, 1),
+(1, 3, 1, 1, 'AM', 20, 1),
+(1, 3, 1, 3, 'PM', 20, 1),
+(2, 4, 5, 0, 'PM', 30, 1),
+(2, 4, 5, 2, 'PM', 30, 1),
+(2, 4, 5, 4, 'AM', 25, 1),
+(2, 5, 4, 1, 'PM', 25, 1),
+(2, 5, 4, 3, 'AM', 25, 1);

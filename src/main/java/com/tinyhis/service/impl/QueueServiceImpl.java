@@ -2,24 +2,18 @@ package com.tinyhis.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.tinyhis.dto.QueueInfo;
-import com.tinyhis.entity.Department;
-import com.tinyhis.entity.PatientInfo;
-import com.tinyhis.entity.Registration;
-import com.tinyhis.entity.SysUser;
-import com.tinyhis.mapper.DepartmentMapper;
-import com.tinyhis.mapper.PatientInfoMapper;
-import com.tinyhis.mapper.RegistrationMapper;
-import com.tinyhis.mapper.SysUserMapper;
+import com.tinyhis.entity.*;
+import com.tinyhis.mapper.*;
 import com.tinyhis.service.QueueService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
+import java.time.LocalDate;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.stream.Collectors;
 
 /**
  * Queue Service Implementation
@@ -34,6 +28,8 @@ public class QueueServiceImpl implements QueueService {
     private final PatientInfoMapper patientInfoMapper;
     private final SysUserMapper sysUserMapper;
     private final DepartmentMapper departmentMapper;
+    private final ScheduleMapper scheduleMapper;
+    private final ConsultingRoomMapper consultingRoomMapper;
 
     // In-memory queue for each doctor
     private final Map<Long, ConcurrentLinkedQueue<Long>> doctorQueues = new ConcurrentHashMap<>();
@@ -87,6 +83,21 @@ public class QueueServiceImpl implements QueueService {
         doctorWrapper.eq(SysUser::getDeptId, deptId)
                      .in(SysUser::getRole, "DOCTOR", "CHIEF");
         List<SysUser> doctors = sysUserMapper.selectList(doctorWrapper);
+        
+        // 获取今天科室所有医生的急诊排班
+        LocalDate today = LocalDate.now();
+        List<Long> doctorIds = doctors.stream().map(SysUser::getUserId).toList();
+        Set<Long> erScheduleIds = new HashSet<>();
+        if (!doctorIds.isEmpty()) {
+            LambdaQueryWrapper<Schedule> scheduleWrapper = new LambdaQueryWrapper<>();
+            scheduleWrapper.in(Schedule::getDoctorId, doctorIds)
+                           .eq(Schedule::getScheduleDate, today)
+                           .eq(Schedule::getShiftType, "ER");
+            List<Schedule> erSchedules = scheduleMapper.selectList(scheduleWrapper);
+            erScheduleIds = erSchedules.stream()
+                    .map(Schedule::getScheduleId)
+                    .collect(Collectors.toSet());
+        }
 
         List<QueueInfo.WaitingPatient> waitingList = new ArrayList<>();
         QueueInfo.CurrentPatient currentPatient = null;
@@ -104,14 +115,37 @@ public class QueueServiceImpl implements QueueService {
                 currentPatient.setRegId(current.getRegId());
                 currentPatient.setQueueNumber(current.getQueueNumber());
                 currentPatient.setPatientName(patient != null ? patient.getName() : "");
-                currentPatient.setRoomNumber("1号诊室");
+                
+                // 获取诊室信息
+                Registration reg = current;
+                Schedule schedule = scheduleMapper.selectById(reg.getScheduleId());
+                if (schedule != null && schedule.getRoomId() != null) {
+                    ConsultingRoom room = consultingRoomMapper.selectById(schedule.getRoomId());
+                    if (room != null) {
+                        currentPatient.setRoomNumber(room.getRoomName());
+                    } else {
+                        currentPatient.setRoomNumber("诊室");
+                    }
+                } else {
+                    currentPatient.setRoomNumber("诊室");
+                }
             }
 
-            // Get waiting patients (status = 2)
+            // Get waiting patients (status = 2 or status = 1 for ER)
             LambdaQueryWrapper<Registration> waitingWrapper = new LambdaQueryWrapper<>();
-            waitingWrapper.eq(Registration::getDoctorId, doctor.getUserId())
-                         .eq(Registration::getStatus, 2)
-                         .orderByAsc(Registration::getQueueNumber);
+            waitingWrapper.eq(Registration::getDoctorId, doctor.getUserId());
+            
+            final Set<Long> finalErScheduleIds = erScheduleIds;
+            if (erScheduleIds.isEmpty()) {
+                waitingWrapper.eq(Registration::getStatus, 2);
+            } else {
+                // 状态2 或 (状态1且是急诊排班)
+                waitingWrapper.and(w -> w.eq(Registration::getStatus, 2)
+                                         .or(q -> q.eq(Registration::getStatus, 1)
+                                                   .in(Registration::getScheduleId, finalErScheduleIds)));
+            }
+            
+            waitingWrapper.orderByAsc(Registration::getQueueNumber);
             List<Registration> waitingRegs = registrationMapper.selectList(waitingWrapper);
 
             for (Registration reg : waitingRegs) {

@@ -1,0 +1,223 @@
+package com.tinyhis.service.impl;
+
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.tinyhis.dto.PrescriptionDetailDTO;
+import com.tinyhis.dto.VisitDetailDTO;
+import com.tinyhis.entity.*;
+import com.tinyhis.exception.BusinessException;
+import com.tinyhis.mapper.*;
+import com.tinyhis.service.DoctorWorkstationService;
+import com.tinyhis.service.EmrService;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.LocalDate;
+import java.util.*;
+
+@Slf4j
+@Service
+@RequiredArgsConstructor
+public class DoctorWorkstationServiceImpl implements DoctorWorkstationService {
+
+    private final RegistrationMapper registrationMapper;
+    private final ScheduleMapper scheduleMapper;
+    private final ConsultingRoomMapper consultingRoomMapper;
+    private final SysUserMapper sysUserMapper;
+    private final DepartmentMapper departmentMapper;
+    private final PatientInfoMapper patientInfoMapper;
+    private final MedicalRecordMapper medicalRecordMapper;
+    private final EmrService emrService;
+
+    @Override
+    public List<VisitDetailDTO> getTodayPatients(Long doctorId) {
+        // Get today's schedules for this doctor
+        LocalDate today = LocalDate.now();
+        LambdaQueryWrapper<Schedule> scheduleWrapper = new LambdaQueryWrapper<>();
+        scheduleWrapper.eq(Schedule::getDoctorId, doctorId)
+                .eq(Schedule::getScheduleDate, today);
+        List<Schedule> todaySchedules = scheduleMapper.selectList(scheduleWrapper);
+        
+        if (todaySchedules.isEmpty()) {
+            return new ArrayList<>();
+        }
+        
+        List<Long> scheduleIds = todaySchedules.stream().map(Schedule::getScheduleId).toList();
+        
+        // 找出急诊排班的 scheduleId
+        Set<Long> erScheduleIds = todaySchedules.stream()
+                .filter(s -> "ER".equalsIgnoreCase(s.getShiftType()))
+                .map(Schedule::getScheduleId)
+                .collect(java.util.stream.Collectors.toSet());
+        
+        // Get ALL registrations for these schedules today (exclude cancelled and unpaid)
+        // 状态 1=待签到, 2=候诊中, 3=就诊中, 4=已完成
+        // 急诊的状态 1 也算候诊中（急诊无需签到，缴费后直接候诊）
+        LambdaQueryWrapper<Registration> wrapper = new LambdaQueryWrapper<>();
+        
+        // 获取今日该排班的所有患者（除了取消的和待缴费的）
+        wrapper.in(Registration::getScheduleId, scheduleIds)
+               .in(Registration::getStatus, 1, 2, 3, 4); // 包含已完成的
+        
+        // 排序：就诊中(3)优先，然后候诊(1,2)，最后已完成(4)
+        // 使用 CASE WHEN 自定义排序: 3 -> 1, 1 -> 2, 2 -> 2, 4 -> 3
+        wrapper.last("ORDER BY CASE status WHEN 3 THEN 1 WHEN 1 THEN 2 WHEN 2 THEN 2 ELSE 3 END, queue_number ASC");
+        
+        List<Registration> registrations = registrationMapper.selectList(wrapper);
+        
+        // Convert to detailed DTOs
+        return registrations.stream()
+                .map(reg -> buildVisitDetailDTO(reg, true))
+                .toList();
+    }
+
+    @Override
+    public VisitDetailDTO getVisitDetail(Long regId) {
+        Registration registration = registrationMapper.selectById(regId);
+        if (registration == null) {
+            throw new BusinessException("挂号记录不存在");
+        }
+        return buildVisitDetailDTO(registration, isToday(registration));
+    }
+
+    @Override
+    public List<VisitDetailDTO> getPatientHistory(Long patientId, Long doctorId) {
+        // Get completed registrations for this patient
+        LambdaQueryWrapper<Registration> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(Registration::getPatientId, patientId)
+               .eq(Registration::getStatus, 4); // Completed
+        
+        if (doctorId != null) {
+            wrapper.eq(Registration::getDoctorId, doctorId);
+        }
+        
+        wrapper.orderByDesc(Registration::getCreateTime);
+        
+        List<Registration> registrations = registrationMapper.selectList(wrapper);
+        
+        return registrations.stream()
+                .map(reg -> buildVisitDetailDTO(reg, false))
+                .toList();
+    }
+
+    @Override
+    @Transactional
+    public Registration pauseConsultation(Long regId) {
+        Registration registration = registrationMapper.selectById(regId);
+        if (registration == null) {
+            throw new BusinessException("挂号记录不存在");
+        }
+        
+        if (registration.getStatus() != 3) {
+            throw new BusinessException("只有就诊中的患者可以暂停");
+        }
+        
+        registration.setStatus(2); // Back to waiting
+        registrationMapper.updateById(registration);
+        
+        log.info("Paused consultation for registration {}", regId);
+        return registration;
+    }
+
+    @Override
+    @Transactional
+    public Registration resumeConsultation(Long regId) {
+        Registration registration = registrationMapper.selectById(regId);
+        if (registration == null) {
+            throw new BusinessException("挂号记录不存在");
+        }
+        
+        if (registration.getStatus() != 2) {
+            throw new BusinessException("只有候诊中的患者可以恢复就诊");
+        }
+        
+        registration.setStatus(3); // In consultation
+        registrationMapper.updateById(registration);
+        
+        log.info("Resumed consultation for registration {}", regId);
+        return registration;
+    }
+    
+    private VisitDetailDTO buildVisitDetailDTO(Registration reg, boolean isToday) {
+        VisitDetailDTO dto = new VisitDetailDTO();
+        
+        // Copy registration info
+        dto.setRegId(reg.getRegId());
+        dto.setPatientId(reg.getPatientId());
+        dto.setDoctorId(reg.getDoctorId());
+        dto.setScheduleId(reg.getScheduleId());
+        dto.setStatus(reg.getStatus());
+        dto.setQueueNumber(reg.getQueueNumber());
+        dto.setFee(reg.getFee());
+        dto.setCreateTime(reg.getCreateTime());
+        dto.setIsToday(isToday);
+        
+        // Get patient info
+        PatientInfo patient = patientInfoMapper.selectById(reg.getPatientId());
+        if (patient != null) {
+            dto.setPatientName(patient.getName());
+            dto.setGender(patient.getGender());
+            dto.setPhone(patient.getPhone());
+            dto.setIdCard(patient.getIdCard());
+            dto.setAge(patient.getAge());
+        }
+        
+        // Get schedule info
+        Schedule schedule = scheduleMapper.selectById(reg.getScheduleId());
+        if (schedule != null) {
+            dto.setScheduleDate(schedule.getScheduleDate().toString());
+            dto.setShiftType(schedule.getShiftType());
+            
+            // Get consulting room info
+            if (schedule.getRoomId() != null) {
+                ConsultingRoom room = consultingRoomMapper.selectById(schedule.getRoomId());
+                if (room != null) {
+                    dto.setRoomId(room.getRoomId());
+                    dto.setRoomName(room.getRoomName());
+                    dto.setRoomLocation(room.getLocation());
+                }
+            }
+            
+            // Get doctor info
+            SysUser doctor = sysUserMapper.selectById(schedule.getDoctorId());
+            if (doctor != null) {
+                dto.setDoctorName(doctor.getRealName());
+                
+                // Get department info
+                if (doctor.getDeptId() != null) {
+                    Department dept = departmentMapper.selectById(doctor.getDeptId());
+                    if (dept != null) {
+                        dto.setDeptName(dept.getDeptName());
+                    }
+                }
+            }
+        }
+        
+        // Get medical record for this visit
+        LambdaQueryWrapper<MedicalRecord> recordWrapper = new LambdaQueryWrapper<>();
+        recordWrapper.eq(MedicalRecord::getRegId, reg.getRegId());
+        MedicalRecord record = medicalRecordMapper.selectOne(recordWrapper);
+        dto.setMedicalRecord(record);
+        
+        // Get prescriptions and lab orders if medical record exists
+        if (record != null) {
+            dto.setPrescriptions(emrService.getPrescriptionDetails(record.getRecordId()));
+            dto.setLabOrders(emrService.getLabOrdersByRecord(record.getRecordId()));
+        } else {
+            dto.setPrescriptions(new ArrayList<>());
+            dto.setLabOrders(new ArrayList<>());
+        }
+        
+        return dto;
+    }
+    
+    private boolean isToday(Registration reg) {
+        if (reg.getScheduleId() == null) return false;
+        
+        Schedule schedule = scheduleMapper.selectById(reg.getScheduleId());
+        if (schedule == null) return false;
+        
+        return LocalDate.now().equals(schedule.getScheduleDate());
+    }
+}

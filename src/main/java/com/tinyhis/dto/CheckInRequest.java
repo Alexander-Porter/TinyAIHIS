@@ -12,9 +12,5 @@ public class CheckInRequest {
     @NotNull(message = "挂号ID不能为空")
     private Long regId;
     
-    @NotNull(message = "纬度不能为空")
-    private Double latitude;
-    
-    @NotNull(message = "经度不能为空")
-    private Double longitude;
+    // GPS 已移除，签到由时间规则控制（就诊前30分钟内签到）
 }

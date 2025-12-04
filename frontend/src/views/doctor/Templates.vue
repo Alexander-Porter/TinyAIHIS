@@ -22,7 +22,7 @@
       <a-form :model="form" :label-col="{ span: 4 }" :wrapper-col="{ span: 20 }">
         <a-form-item label="模板名称">
           <a-input v-model:value="form.name" placeholder="请输入模板名称" />
-        </el-form-item>
+        </a-form-item>
         <a-form-item label="模板类型">
           <a-select v-model:value="form.type" style="width: 100%">
             <a-select-option value="EMR">病历模板</a-select-option>

@@ -5,7 +5,7 @@
     <div class="content">
       <van-empty v-if="reports.length === 0" description="暂无检查报告" />
       
-      <div class="report-item" v-for="report in reports" :key="report.orderId">
+      <div class="report-item" v-for="report in reports" :key="report.orderId" @click="viewReport(report)">
         <div class="header">
           <div class="title">{{ report.itemName }}</div>
           <div class="status" :class="getStatusClass(report.status)">
@@ -13,24 +13,36 @@
           </div>
         </div>
         <div class="time">{{ formatTime(report.createTime) }}</div>
-        
-        <div class="result" v-if="report.status === 2 && report.resultText">
-          <div class="result-title">检查结果</div>
-          <div class="result-content">{{ report.resultText }}</div>
-        </div>
+        <div class="hint" v-if="report.status === 2">点击查看详细报告 ></div>
       </div>
     </div>
+    
+    <!-- Report Detail Popup -->
+    <van-popup v-model:show="showDetail" position="bottom" :style="{ height: '90%' }" round>
+      <div class="report-detail" v-if="currentReport">
+        <div class="detail-header">
+          <div class="title">{{ currentReport.itemName }}</div>
+          <van-icon name="cross" @click="showDetail = false" />
+        </div>
+        <div class="detail-meta">
+          <span>报告时间：{{ formatTime(currentReport.resultTime) }}</span>
+        </div>
+        <div class="detail-content" v-html="currentReport.resultText"></div>
+      </div>
+    </van-popup>
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import { NavBar as VanNavBar, Empty as VanEmpty } from 'vant'
+import { NavBar as VanNavBar, Empty as VanEmpty, Popup as VanPopup, Icon as VanIcon } from 'vant'
 import { labApi } from '@/utils/api'
 import { useUserStore } from '@/stores/user'
 
 const userStore = useUserStore()
 const reports = ref([])
+const showDetail = ref(false)
+const currentReport = ref(null)
 
 onMounted(async () => {
   const patientId = userStore.userInfo.patientId || userStore.userInfo.userId
@@ -41,6 +53,13 @@ onMounted(async () => {
     console.error('Failed to load reports', e)
   }
 })
+
+const viewReport = (report) => {
+  if (report.status === 2 && report.resultText) {
+    currentReport.value = report
+    showDetail.value = true
+  }
+}
 
 const getStatusText = (status) => {
   const map = { 0: '待缴费', 1: '检验中', 2: '已出结果' }
@@ -72,6 +91,7 @@ const formatTime = (time) => {
     border-radius: 12px;
     padding: 15px;
     margin-bottom: 10px;
+    cursor: pointer;
     
     .header {
       display: flex;
@@ -98,22 +118,66 @@ const formatTime = (time) => {
       margin-top: 5px;
     }
     
-    .result {
-      margin-top: 15px;
-      padding-top: 15px;
-      border-top: 1px solid #eee;
+    .hint {
+      margin-top: 10px;
+      font-size: 13px;
+      color: #409eff;
+    }
+  }
+  
+  .report-detail {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    
+    .detail-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 16px;
+      border-bottom: 1px solid #eee;
       
-      .result-title {
-        font-size: 14px;
-        font-weight: 500;
-        margin-bottom: 10px;
+      .title {
+        font-size: 18px;
+        font-weight: 600;
+      }
+    }
+    
+    .detail-meta {
+      padding: 12px 16px;
+      font-size: 13px;
+      color: #666;
+      background: #f5f7fa;
+    }
+    
+    .detail-content {
+      flex: 1;
+      padding: 16px;
+      overflow: auto;
+      
+      :deep(table) {
+        width: 100%;
+        border-collapse: collapse;
+        
+        th, td {
+          border: 1px solid #ddd;
+          padding: 8px 12px;
+          text-align: left;
+        }
+        
+        th {
+          background: #f5f7fa;
+          font-weight: 500;
+        }
       }
       
-      .result-content {
-        font-size: 14px;
-        color: #333;
+      :deep(p) {
+        margin: 10px 0;
         line-height: 1.6;
-        white-space: pre-wrap;
+      }
+      
+      :deep(strong) {
+        font-weight: 600;
       }
     }
   }

@@ -10,7 +10,7 @@
         <div class="number" v-if="currentCall">{{ currentCall.queueNumber }}</div>
         <div class="number" v-else>--</div>
         <div class="patient-name" v-if="currentCall">{{ maskName(currentCall.patientName) }}</div>
-        <div class="room" v-if="currentCall">请到 {{ currentCall.room || '诊室' }} 就诊</div>
+        <div class="room" v-if="currentCall">请到 {{ currentCall.roomNumber || '诊室' }} 就诊</div>
       </div>
       
       <div class="waiting-list">

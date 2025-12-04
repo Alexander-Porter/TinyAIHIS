@@ -41,19 +41,19 @@
       <div class="step" v-if="step === 3">
         <div class="step-title">选择医生</div>
         <div class="schedule-list">
-          <div v-if="schedules.length === 0" class="empty-schedule">
-            该科室当日暂无排班
+          <div v-if="availableSchedules.length === 0" class="empty-schedule">
+            该科室当日暂无可用号源
           </div>
           <div 
             class="schedule-item" 
-            v-for="s in schedules" 
+            v-for="s in availableSchedules" 
             :key="s.scheduleId"
-            :class="{ active: selectedSchedule?.scheduleId === s.scheduleId, disabled: s.quotaLeft <= 0 }"
+            :class="{ active: selectedSchedule?.scheduleId === s.scheduleId, disabled: s.quotaLeft <= 0 || s.expired }"
             @click="selectSchedule(s)">
             <div class="doctor">{{ s.doctorName }}</div>
-            <div class="time">{{ s.shift === 'AM' ? '上午' : '下午' }}</div>
-            <div class="quota" :class="{ warning: s.quotaLeft < 5 }">
-              余号: {{ s.quotaLeft }}
+            <div class="time">{{ getShiftLabel(s.shift) }}</div>
+            <div class="quota" :class="{ warning: s.quotaLeft < 5, expired: s.expired }">
+              {{ s.expired ? '已过期' : '余号: ' + s.quotaLeft }}
             </div>
             <div class="fee">¥{{ s.fee }}</div>
           </div>
@@ -74,7 +74,7 @@
           <p>日期：{{ formatDate(selectedDate) }}</p>
           <p>科室：{{ selectedDept?.deptName }}</p>
           <p>医生：{{ selectedSchedule?.doctorName }}</p>
-          <p>时间：{{ selectedSchedule?.shift === 'AM' ? '上午' : '下午' }}</p>
+          <p>时间：{{ getShiftLabel(selectedSchedule?.shift) }}</p>
           <p>挂号费：¥{{ selectedSchedule?.fee }}</p>
           <p style="color: #f56c6c; font-weight: bold; margin-top: 10px">请立即完成支付，否则无法签到就诊</p>
         </div>
@@ -148,7 +148,17 @@ const selectDept = async (dept) => {
   }
 }
 
+// 过滤掉已过期的号源（但仍可以显示，只是不可选）
+const availableSchedules = computed(() => {
+  // 返回所有号源，前端根据 expired 状态显示
+  return schedules.value
+})
+
 const selectSchedule = (schedule) => {
+  if (schedule.expired) {
+    showToast('该时段号源已过期')
+    return
+  }
   if (schedule.quotaLeft <= 0) {
     showToast('该时段已约满')
     return
@@ -199,6 +209,11 @@ const goBack = () => {
 const formatDate = (str) => {
   if (!str) return ''
   return new Date(str).toLocaleDateString()
+}
+
+const getShiftLabel = (shift) => {
+  const labels = { 'AM': '上午', 'PM': '下午', 'ER': '急诊(全天)' }
+  return labels[shift] || shift
 }
 </script>
 
@@ -308,6 +323,10 @@ const formatDate = (str) => {
         
         &.warning {
           color: #e6a23c;
+        }
+        
+        &.expired {
+          color: #909399;
         }
       }
       

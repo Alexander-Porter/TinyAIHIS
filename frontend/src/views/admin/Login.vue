@@ -39,7 +39,11 @@ const form = reactive({ username: '', password: '' })
 const onSubmit = async () => {
   loading.value = true
   try {
-    const data = await authApi.adminLogin(form)
+    const data = await authApi.staffLogin(form)
+    if (data.role !== 'ADMIN') {
+      message.error('请使用管理员账号登录')
+      return
+    }
     userStore.login(data)
     router.push('/admin/dashboard')
   } catch (e) { console.error(e) } finally { loading.value = false }

@@ -29,6 +29,11 @@ api.interceptors.request.use(
 // Response interceptor
 api.interceptors.response.use(
   response => {
+    // Handle blob responses (file downloads) - return raw data
+    if (response.config.responseType === 'blob') {
+      return response.data
+    }
+    
     const res = response.data
     if (res.code !== 200) {
       message.error(res.message || '请求失败')
@@ -54,6 +59,7 @@ export const authApi = {
   patientRegister: (data) => api.post('/auth/patient/register', data),
   patientLogin: (data) => api.post('/auth/patient/login', data),
   staffLogin: (data) => api.post('/auth/staff/login', data),
+  adminLogin: (data) => api.post('/auth/staff/login', data), // alias for admin
   getPatient: (id) => api.get(`/auth/patient/${id}`),
   getStaff: (id) => api.get(`/auth/staff/${id}`),
 }
@@ -80,6 +86,11 @@ export const registrationApi = {
 // Doctor APIs
 export const doctorApi = {
   getQueue: (doctorId) => api.get(`/doctor/queue/${doctorId}`),
+  getTodayPatients: (doctorId) => api.get(`/doctor/patients/${doctorId}`),
+  getVisitDetail: (regId) => api.get(`/doctor/visit/${regId}`),
+  getPatientHistory: (patientId, doctorId) => api.get(`/doctor/history/${patientId}`, { params: { doctorId } }),
+  pause: (regId) => api.post(`/doctor/pause/${regId}`),
+  resume: (regId) => api.post(`/doctor/resume/${regId}`),
   callNext: (doctorId) => api.post(`/doctor/callNext/${doctorId}`),
   complete: (regId) => api.post(`/doctor/complete/${regId}`),
 }
@@ -139,6 +150,29 @@ export const paymentApi = {
 
 // Admin APIs
 export const adminApi = {
+  // User management
+  getUsers: (params) => api.get('/admin/users', { params }),
+  saveUser: (data) => api.post('/admin/user/save', data),
+  updateUserStatus: (userId, status) => api.post(`/admin/user/${userId}/status`, null, { params: { status } }),
+  deleteUser: (userId) => api.delete(`/admin/user/${userId}`),
+  
+  // Department management
+  saveDepartment: (data) => api.post('/admin/department/save', data),
+  updateDepartmentStatus: (deptId, status) => api.post(`/admin/department/${deptId}/status`, null, { params: { status } }),
+  deleteDepartment: (deptId) => api.delete(`/admin/department/${deptId}`),
+  
+  // Consulting room management
+  getRooms: () => api.get('/admin/rooms'),
+  saveRoom: (data) => api.post('/admin/rooms', data),
+  deleteRoom: (roomId) => api.delete(`/admin/room/${roomId}`),
+  
+  // Schedule template management (weekly recurring schedules)
+  getScheduleTemplates: (deptId) => api.get('/admin/schedule-templates', { params: { deptId } }),
+  saveScheduleTemplate: (data) => api.post('/admin/schedule-template/save', data),
+  deleteScheduleTemplate: (templateId) => api.delete(`/admin/schedule-template/${templateId}`),
+  generateWeekSchedules: () => api.post('/admin/schedules/generate'),
+  
+  // Drug import/export
   importDrugs: (file) => {
     const formData = new FormData()
     formData.append('file', file)
@@ -147,4 +181,22 @@ export const adminApi = {
     })
   },
   exportDrugs: () => api.get('/admin/drugs/export', { responseType: 'blob' }),
+  
+  // Statistics
+  getStats: () => api.get('/admin/stats'),
+  getDashboardStats: () => api.get('/admin/dashboard-stats'),
+  
+  // Data Query & Export
+  queryData: (params) => api.get('/admin/query', { params }),
+  exportData: (params) => {
+    return api.get('/admin/export', { params, responseType: 'blob' }).then(res => {
+      const blob = new Blob([res], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${params.type}_export_${new Date().toISOString().slice(0,10)}.xlsx`
+      a.click()
+      window.URL.revokeObjectURL(url)
+    })
+  },
 }

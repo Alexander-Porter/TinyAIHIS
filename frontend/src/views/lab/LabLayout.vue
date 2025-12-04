@@ -1,21 +1,22 @@
 <template>
   <div class="lab-layout">
-    <div class="sidebar" v-if="isLoggedIn">
-      <div class="logo">
-        <div class="logo-icon"><ExperimentOutlined /></div>
-        <span>检验科</span>
+    <!-- Top Navigation Bar -->
+    <div class="top-nav" v-if="isLoggedIn">
+      <div class="nav-left">
+        <div class="logo">
+          <ExperimentOutlined />
+          <span>检验科工作站</span>
+        </div>
       </div>
-      <a-menu :selectedKeys="['workstation']" mode="inline">
-        <a-menu-item key="workstation">
-          <template #icon><DesktopOutlined /></template>
-          <span>检验工作台</span>
-        </a-menu-item>
-      </a-menu>
-      <div class="logout" @click="logout">
-        <LogoutOutlined /> 退出登录
+      <div class="nav-right">
+        <div class="user-info">
+          <UserOutlined />
+          <span>{{ userStore.userInfo.realName }}</span>
+        </div>
+        <a-button type="text" @click="logout"><LogoutOutlined /> 退出</a-button>
       </div>
     </div>
-    <div class="main-content">
+    <div class="main-content" :class="{ 'with-nav': isLoggedIn }">
       <router-view />
     </div>
   </div>
@@ -24,7 +25,7 @@
 <script setup>
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { DesktopOutlined, LogoutOutlined, ExperimentOutlined } from '@ant-design/icons-vue'
+import { LogoutOutlined, ExperimentOutlined, UserOutlined } from '@ant-design/icons-vue'
 import { useUserStore } from '@/stores/user'
 
 const route = useRoute()
@@ -41,86 +42,58 @@ const logout = () => {
 <style scoped lang="scss">
 .lab-layout {
   display: flex;
+  flex-direction: column;
   height: 100vh;
   background-color: var(--bg-body);
-  
-  .sidebar {
-    width: 260px;
+
+  .top-nav {
+    height: 56px;
     background: var(--bg-surface);
-    border-right: 1px solid var(--border-color);
+    border-bottom: 1px solid var(--border-color);
     display: flex;
-    flex-direction: column;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 24px;
     box-shadow: var(--shadow-sm);
-    z-index: 10;
-    
-    .logo {
-      height: 80px;
+    z-index: 100;
+    flex-shrink: 0;
+
+    .nav-left {
       display: flex;
       align-items: center;
-      padding: 0 24px;
-      color: var(--text-primary);
-      font-size: 1.125rem;
-      font-weight: 600;
-      border-bottom: 1px solid var(--border-color);
-      
-      .logo-icon {
-        width: 32px;
-        height: 32px;
-        background: var(--primary-color);
-        color: #fff;
-        border-radius: 8px;
+
+      .logo {
         display: flex;
         align-items: center;
-        justify-content: center;
-        margin-right: 12px;
+        gap: 10px;
+        font-size: 1.1rem;
+        font-weight: 600;
+        color: var(--primary-color);
       }
     }
-    
-    :deep(.ant-menu) {
-      flex: 1;
-      border: none;
-      background: transparent;
-      padding: 16px 0;
-      
-      .ant-menu-item {
-        height: 50px;
-        line-height: 50px;
-        margin: 4px 16px;
-        border-radius: var(--radius-md);
-        color: var(--text-secondary);
-        
-        &:hover {
-          background: var(--bg-body);
-          color: var(--text-primary);
-        }
-        
-        &.ant-menu-item-selected {
-          background: rgba(0, 102, 204, 0.1);
-          color: var(--accent-color);
-          font-weight: 500;
-        }
-      }
-    }
-    
-    .logout {
-      padding: 20px;
-      cursor: pointer;
-      color: var(--text-secondary);
-      border-top: 1px solid var(--border-color);
+
+    .nav-right {
       display: flex;
       align-items: center;
-      gap: 10px;
-      
-      &:hover {
-        color: var(--error-color);
+      gap: 16px;
+
+      .user-info {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--text-secondary);
+        font-size: 0.9rem;
       }
     }
   }
-  
+
   .main-content {
     flex: 1;
     overflow: auto;
-    background: var(--bg-body);
+
+    &.with-nav {
+      height: calc(100vh - 56px);
+    }
   }
 }
 </style>
