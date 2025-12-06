@@ -14,14 +14,21 @@ spring:
       host: localhost
       port: 6379
       database: 0
+  # Spring AI OpenAI config no longer used (manual SSE client in RagTriageService)
+  # Kept here for reference; can remove if not needed elsewhere.
   ai:
     openai:
       api-key: ${SILICONFLOW_API_KEY:}
-      base-url: https://api.siliconflow.cn/v1
+      base-url: https://api.siliconflow.cn
       chat:
         options:
-          model: Qwen/Qwen2.5-7B-Instruct
+          model: THUDM/GLM-Z1-9B-0414
           temperature: 0.7
+
+# SiliconFlow manual client configuration (used by RagTriageService)
+siliconflow:
+  api-key: ${SILICONFLOW_API_KEY:}
+  model: ${SILICONFLOW_MODEL:THUDM/GLM-Z1-9B-0414}
 
 mybatis-plus:
   mapper-locations: classpath:/mapper/**/*.xml
@@ -49,7 +56,12 @@ triage:
 # Medical Knowledge Base
 medical:
   knowledge:
-    path: classpath:medical-knowledge/
+    path: file:./medical-knowledge/
+    vector-path: file:./vector-index/
+
+# Application Configuration
+app:
+  demo-mode: ${APP_DEMO_MODE:false}
 
 logging:
   level:

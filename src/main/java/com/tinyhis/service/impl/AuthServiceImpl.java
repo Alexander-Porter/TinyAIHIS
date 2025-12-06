@@ -12,6 +12,7 @@ import com.tinyhis.mapper.SysUserMapper;
 import com.tinyhis.service.AuthService;
 import com.tinyhis.util.JwtUtils;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
@@ -26,6 +27,9 @@ public class AuthServiceImpl implements AuthService {
     private final SysUserMapper sysUserMapper;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtils jwtUtils;
+
+    @Value("${app.demo-mode:false}")
+    private boolean demoMode;
 
     @Override
     public PatientInfo registerPatient(PatientRegisterRequest request) {
@@ -59,8 +63,11 @@ public class AuthServiceImpl implements AuthService {
             throw new BusinessException("用户不存在");
         }
 
-        if (!passwordEncoder.matches(request.getPassword(), patient.getPassword())) {
-            throw new BusinessException("密码错误");
+        // In demo mode, skip password check
+        if (!demoMode) {
+            if (!passwordEncoder.matches(request.getPassword(), patient.getPassword())) {
+                throw new BusinessException("密码错误");
+            }
         }
 
         String token = jwtUtils.generateToken(patient.getPatientId(), patient.getPhone(), "PATIENT", "patient");
@@ -76,15 +83,18 @@ public class AuthServiceImpl implements AuthService {
         SysUser user = sysUserMapper.selectOne(wrapper);
 
         if (user == null) {
-            throw new BusinessException("用户不存在");
-        }
-
         if (user.getStatus() != null && user.getStatus() == 0) {
             throw new BusinessException("账号已被禁用");
         }
 
-        if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
-            throw new BusinessException("密码错误");
+        // In demo mode, skip password check
+        if (!demoMode) {
+            if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
+                throw new BusinessException("密码错误");
+            }
+        }
+
+        String token = jwtUtils.generateToken(user.getUserId(), user.getUsername(), user.getRole(), "staff");
         }
 
         String token = jwtUtils.generateToken(user.getUserId(), user.getUsername(), user.getRole(), "staff");

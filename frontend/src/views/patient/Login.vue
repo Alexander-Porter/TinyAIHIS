@@ -6,6 +6,25 @@
       <div class="logo">🏥</div>
       <h2>TinyHIS</h2>
       
+      <div v-if="isDemo" class="demo-selector">
+        <van-notice-bar left-icon="info-o" text="演示模式已开启" style="margin-bottom: 16px" />
+        <van-field
+          v-model="selectedDemoUser"
+          is-link
+          readonly
+          label="演示账号"
+          placeholder="选择演示账号"
+          @click="showPicker = true"
+        />
+        <van-popup v-model:show="showPicker" round position="bottom">
+          <van-picker
+            :columns="demoUserColumns"
+            @cancel="showPicker = false"
+            @confirm="onDemoUserConfirm"
+          />
+        </van-popup>
+      </div>
+
       <van-form @submit="onSubmit">
         <van-cell-group inset>
           <van-field
@@ -16,6 +35,7 @@
             :rules="[{ required: true, message: '请输入手机号' }]"
           />
           <van-field
+            v-if="!isDemo"
             v-model="form.password"
             type="password"
             name="password"
@@ -40,11 +60,12 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { NavBar as VanNavBar, Form as VanForm, Field as VanField, CellGroup as VanCellGroup, Button as VanButton, showToast } from 'vant'
+import { NavBar as VanNavBar, Form as VanForm, Field as VanField, CellGroup as VanCellGroup, Button as VanButton, showToast, NoticeBar as VanNoticeBar, Popup as VanPopup, Picker as VanPicker } from 'vant'
 import { useUserStore } from '@/stores/user'
 import { authApi } from '@/utils/api'
+import axios from 'axios'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -55,9 +76,47 @@ const form = ref({
   password: ''
 })
 
+const isDemo = ref(false)
+const demoUsers = ref([])
+const selectedDemoUser = ref('')
+const showPicker = ref(false)
+
+const demoUserColumns = computed(() => {
+  return demoUsers.value.map(u => ({ text: `${u.name} (${u.phone})`, value: u.phone, user: u }))
+})
+
+onMounted(async () => {
+  try {
+    const res = await axios.get('/api/auth/demo-info')
+    if (res.data.code === 200) {
+      const data = res.data.data
+      isDemo.value = data.isDemo
+      if (data.isDemo) {
+        demoUsers.value = data.patients
+      }
+    }
+  } catch (e) {
+    console.error('Failed to fetch demo info', e)
+  }
+})
+
+const onDemoUserConfirm = ({ selectedOptions }) => {
+  const user = selectedOptions[0].user
+  if (user) {
+    selectedDemoUser.value = `${user.name} (${user.phone})`
+    form.value.username = user.phone
+    form.value.password = 'demo' // Dummy password for demo mode
+    showPicker.value = false
+  }
+}
+
 const onSubmit = async () => {
   loading.value = true
   try {
+    // In demo mode, if password is empty, set a dummy password to pass backend validation
+    if (isDemo.value && !form.value.password) {
+      form.value.password = 'demo'
+    }
     const data = await authApi.patientLogin(form.value)
     userStore.login({ ...data, patientId: data.userId })
     showToast('登录成功')
