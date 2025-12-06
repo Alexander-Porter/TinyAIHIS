@@ -8,6 +8,7 @@ import com.tinyhis.service.TriageService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 /**
  * AI Triage Service Implementation
@@ -22,23 +23,16 @@ public class TriageServiceImpl implements TriageService {
 
     @Override
     public TriageResult triage(TriageRequest request) {
-        String bodyPart = request.getBodyPart();
-        String description = request.getDescription();
+        throw new UnsupportedOperationException("Synchronous triage is deprecated. Use streamTriage.");
+    }
 
-        try {
-            // Use RAG-based triage
-            TriageRecommendation recommendation = ragTriageService.triage(description, bodyPart);
-            
-            TriageResult result = new TriageResult();
-            result.setDeptId(recommendation.getDeptId());
-            result.setDeptName(recommendation.getDepartment());
-            result.setReason(recommendation.getReason());
-            
-            return result;
-        } catch (Exception e) {
-            log.error("Triage failed", e);
-            // Fallback to default
-            return new TriageResult(1L, "内科", "建议先到内科进行综合评估");
-        }
+    @Override
+    public void streamTriage(TriageRequest request, SseEmitter emitter) {
+        ragTriageService.streamTriage(request.getDescription(), request.getBodyPart(), emitter);
+    }
+
+    @Override
+    public void streamDoctorAssist(Long patientId, String userQuery, String conversationId, SseEmitter emitter) {
+        ragTriageService.streamDoctorAssist(patientId, userQuery, conversationId, emitter);
     }
 }

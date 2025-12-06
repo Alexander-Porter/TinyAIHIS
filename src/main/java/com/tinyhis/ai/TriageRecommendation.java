@@ -12,5 +12,6 @@ public class TriageRecommendation {
     private String department;
     private String reason;
     private String possibleDiseases;
+    private String thoughtProcess;
     private List<String> referenceDocs;
 }

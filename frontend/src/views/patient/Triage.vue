@@ -2,7 +2,7 @@
   <div class="triage-page">
     <van-nav-bar title="AI智能分诊" left-arrow @click-left="$router.back()" />
     
-    <div class="content">
+    <div class="content" v-if="!chatMode">
       <!-- Body Map -->
       <div class="body-section">
         <h3>请点击不适部位</h3>
@@ -32,22 +32,14 @@
       
       <!-- Submit Button -->
       <div class="submit-section">
-        <van-button type="primary" block :loading="loading" @click="doTriage">
-          🤖 AI分析推荐
+        <van-button type="primary" block @click="startChat">
+          🤖 开始AI问诊
         </van-button>
       </div>
-      
-      <!-- Result -->
-      <div class="result-section" v-if="result">
-        <div class="result-card">
-          <div class="title">🏥 推荐就诊科室</div>
-          <div class="dept-name">{{ result.deptName }}</div>
-          <div class="reason">{{ result.reason }}</div>
-          <van-button type="success" block @click="goAppointment">
-            立即挂号
-          </van-button>
-        </div>
-      </div>
+    </div>
+
+    <div class="chat-container" v-else>
+      <AiTriageChat :initialQuery="initialQuery" @select="handleSelect" />
     </div>
   </div>
 </template>
@@ -58,14 +50,15 @@ import { useRouter } from 'vue-router'
 import { NavBar as VanNavBar, Field as VanField, Button as VanButton, showToast } from 'vant'
 import { triageApi } from '@/utils/api'
 import { useUserStore } from '@/stores/user'
+import AiTriageChat from '@/components/AiTriageChat.vue'
 
 const router = useRouter()
 const userStore = useUserStore()
 
 const selectedPart = ref('')
 const symptoms = ref('')
-const loading = ref(false)
-const result = ref(null)
+const chatMode = ref(false)
+const initialQuery = ref('')
 
 const bodyParts = [
   { name: '头部', label: '🧠 头部', style: { top: '5%', left: '50%', transform: 'translateX(-50%)' } },
@@ -83,34 +76,19 @@ const selectPart = (name) => {
   selectedPart.value = name
 }
 
-const doTriage = async () => {
-  if (!selectedPart.value && !symptoms.value) {
-    showToast('请选择部位或描述症状')
-    return
-  }
+const startChat = () => {
+  let query = ''
+  if (selectedPart.value) query += `部位：${selectedPart.value}。`
+  if (symptoms.value) query += `症状：${symptoms.value}`
   
-  loading.value = true
-  try {
-    result.value = await triageApi.recommend({
-      bodyPart: selectedPart.value,
-      description: symptoms.value
-    })
-  } catch (e) {
-    console.error('Triage failed', e)
-  } finally {
-    loading.value = false
-  }
+  initialQuery.value = query
+  chatMode.value = true
 }
 
-const goAppointment = () => {
-  if (!userStore.isLoggedIn) {
-    showToast('请先登录')
-    router.push('/patient/login')
-    return
-  }
+const handleSelect = (data) => {
   router.push({
     path: '/patient/appointment',
-    query: { deptId: result.value.deptId }
+    query: { deptName: data.department }
   })
 }
 </script>
@@ -118,45 +96,53 @@ const goAppointment = () => {
 <style scoped lang="scss">
 .triage-page {
   min-height: 100vh;
-  background: #f5f7fa;
+  background: #f5f6f7;
+  display: flex;
+  flex-direction: column;
   
   .content {
-    padding: 15px;
+    flex: 1;
+    padding: 16px;
+    overflow-y: auto;
   }
   
-  h3 {
-    font-size: 16px;
-    margin: 0 0 10px;
-    color: #333;
+  .chat-container {
+    flex: 1;
+    height: 0; // Force flex item to respect height
+    padding: 10px;
   }
-  
+
   .body-section {
     background: #fff;
     border-radius: 12px;
-    padding: 15px;
-    margin-bottom: 15px;
+    padding: 16px;
+    margin-bottom: 16px;
+    
+    h3 {
+      margin: 0 0 16px 0;
+      font-size: 16px;
+    }
     
     .body-map {
       position: relative;
-      height: 350px;
-      background: linear-gradient(180deg, #e8f4fd 0%, #fff 100%);
+      height: 300px;
+      background: #e6f7ff;
       border-radius: 8px;
       
       .body-part {
         position: absolute;
-        padding: 8px 12px;
-        background: rgba(64, 158, 255, 0.1);
-        border: 2px solid #409eff;
-        border-radius: 20px;
+        background: #fff;
+        padding: 4px 8px;
+        border-radius: 12px;
         font-size: 12px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         cursor: pointer;
         transition: all 0.2s;
-        white-space: nowrap;
         
-        &:hover, &.active {
-          background: #409eff;
+        &.active {
+          background: #1890ff;
           color: #fff;
-          transform: scale(1.1);
+          transform: scale(1.1) translateX(-50%);
         }
       }
     }
@@ -165,39 +151,12 @@ const goAppointment = () => {
   .symptoms-section {
     background: #fff;
     border-radius: 12px;
-    padding: 15px;
-    margin-bottom: 15px;
-  }
-  
-  .submit-section {
-    margin-bottom: 15px;
-  }
-  
-  .result-section {
-    .result-card {
-      background: linear-gradient(135deg, #67c23a 0%, #529b2e 100%);
-      border-radius: 12px;
-      padding: 20px;
-      color: #fff;
-      text-align: center;
-      
-      .title {
-        font-size: 14px;
-        opacity: 0.9;
-        margin-bottom: 10px;
-      }
-      
-      .dept-name {
-        font-size: 28px;
-        font-weight: bold;
-        margin-bottom: 10px;
-      }
-      
-      .reason {
-        font-size: 14px;
-        opacity: 0.9;
-        margin-bottom: 20px;
-      }
+    padding: 16px;
+    margin-bottom: 24px;
+    
+    h3 {
+      margin: 0 0 12px 0;
+      font-size: 16px;
     }
   }
 }
