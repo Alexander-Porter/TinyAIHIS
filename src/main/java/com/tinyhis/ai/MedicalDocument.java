@@ -11,4 +11,5 @@ public class MedicalDocument {
     private String diseaseName;
     private String content;
     private String department;
+    private java.util.List<Double> embedding;
 }
