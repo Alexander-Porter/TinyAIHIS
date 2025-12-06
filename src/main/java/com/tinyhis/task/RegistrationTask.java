@@ -6,6 +6,8 @@ import com.tinyhis.mapper.RegistrationMapper;
 import com.tinyhis.service.RegistrationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -45,5 +47,23 @@ public class RegistrationTask {
                 }
             }
         }
+    }
+
+    /**
+     * Check for expired registrations (past date) daily at midnight
+     */
+    @Scheduled(cron = "0 0 0 * * ?")
+    public void checkExpiredRegistrations() {
+        log.info("Checking for expired registrations...");
+        int count = registrationMapper.expirePastRegistrations();
+        log.info("Expired {} past registrations.", count);
+    }
+
+    /**
+     * Check on application startup
+     */
+    @EventListener(ApplicationReadyEvent.class)
+    public void onStartup() {
+        checkExpiredRegistrations();
     }
 }
