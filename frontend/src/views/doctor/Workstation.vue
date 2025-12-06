@@ -85,55 +85,39 @@
           <!-- Main Tabs -->
           <div class="panel-card content-card">
             <a-tabs v-model:activeKey="mainTab" type="card" class="workspace-tabs">
+              <!-- Tab栏右侧按钮 -->
+              <template #rightExtra>
+                <div class="tab-extra-buttons">
+                  <a-button v-if="mainTab === 'emr'" type="primary" size="small" @click="saveEmrFromTemplate" :loading="saving">
+                    <template #icon><SaveOutlined /></template> 保存病历
+                  </a-button>
+                  <a-button v-if="mainTab === 'emr'" size="small" @click="printEmr">
+                    <template #icon><PrinterOutlined /></template> 打印病历
+                  </a-button>
+                  <a-button v-if="mainTab === 'lab'" size="small" @click="printLabOrders" :disabled="labOrders.length === 0">
+                    <template #icon><PrinterOutlined /></template> 打印申请单
+                  </a-button>
+                  <a-button v-if="mainTab === 'prescription'" size="small" @click="printPrescription" :disabled="prescriptions.length === 0">
+                    <template #icon><PrinterOutlined /></template> 打印处方笺
+                  </a-button>
+                </div>
+              </template>
               <!-- Tab 1: EMR -->
-              <a-tab-pane key="emr" tab="病历文书">
-                <div class="tab-content">
-                  <!-- 模式切换 -->
-                  <div class="emr-mode-switch">
-                    <a-radio-group v-model:value="emrMode" button-style="solid" size="small">
-                      <a-radio-button value="simple">简易模式</a-radio-button>
-                      <a-radio-button value="template">电子病历</a-radio-button>
-                    </a-radio-group>
-                    <a-button size="small" @click="printEmr" v-if="emrMode === 'template'">
-                      <template #icon><PrinterOutlined /></template> 打印病历
-                    </a-button>
-                  </div>
-
-                  <!-- 简易模式 -->
-                  <template v-if="emrMode === 'simple'">
-                    <a-form :model="emrForm" layout="vertical" class="emr-form">
-                      <a-form-item label="主诉">
-                        <a-textarea v-model:value="emrForm.symptom" :rows="2" placeholder="患者主诉..." />
-                      </a-form-item>
-                      <a-form-item label="诊断">
-                        <a-input v-model:value="emrForm.diagnosis" placeholder="诊断结果" />
-                      </a-form-item>
-                      <a-form-item label="现病史/查体">
-                        <a-textarea v-model:value="emrForm.content" :rows="8" placeholder="详细内容..." />
-                      </a-form-item>
-                      <div class="form-actions">
-                        <a-button type="primary" @click="saveEmr" :loading="saving">
-                          <template #icon><SaveOutlined /></template> 保存病历
-                        </a-button>
-                      </div>
-                    </a-form>
-                  </template>
-
-                  <!-- 电子病历模板模式 -->
-                  <template v-else>
+              <a-tab-pane key="emr" tab="电子病历">
+                <div class="tab-content emr-tab-content">
+                  <!-- 电子病历编辑器 -->
+                  <div class="emr-editor-wrapper">
                     <EmrEditor 
                       ref="emrEditorRef"
                       v-model="emrTemplateData"
                       :patientInfo="currentPatientInfo"
                       :hospitalName="'清远友谊医院'"
+                      :labOrders="labOrders"
+                      :prescriptions="prescriptions"
+                      :drugs="drugs"
                       @print="handleEmrPrint"
                     />
-                    <div class="form-actions">
-                      <a-button type="primary" @click="saveEmrFromTemplate" :loading="saving">
-                        <template #icon><SaveOutlined /></template> 保存病历
-                      </a-button>
-                    </div>
-                  </template>
+                  </div>
                 </div>
               </a-tab-pane>
 
@@ -143,9 +127,6 @@
                   <div class="section-header">
                     <span>已开项目</span>
                     <div class="header-actions">
-                      <a-button size="small" @click="printLabOrders" :disabled="labOrders.length === 0">
-                        <template #icon><PrinterOutlined /></template> 打印申请单
-                      </a-button>
                       <a-button type="primary" size="small" @click="addLabOrder">+ 开立检查</a-button>
                     </div>
                   </div>
@@ -196,9 +177,6 @@
                   <div class="section-header">
                     <span>处方明细</span>
                     <div class="header-actions">
-                      <a-button size="small" @click="printPrescription" :disabled="prescriptions.length === 0">
-                        <template #icon><PrinterOutlined /></template> 打印处方笺
-                      </a-button>
                       <a-button type="primary" size="small" @click="addPrescription">+ 添加药品</a-button>
                     </div>
                   </div>
@@ -349,7 +327,6 @@ const patients = ref([])
 const patientFilter = ref('all')
 const currentPatient = ref(null)
 const mainTab = ref('emr')
-const emrMode = ref('simple') // 'simple' or 'template'
 const calling = ref(false)
 const saving = ref(false)
 const loadingHistory = ref(false)
@@ -646,14 +623,72 @@ const getLabStatusText = (status) => {
 
 const applyTemplate = (tpl) => {
   if (tpl.type === 'EMR') {
-    try {
-      const content = JSON.parse(tpl.content)
-      emrForm.symptom = content.symptom || emrForm.symptom
-      emrForm.diagnosis = content.diagnosis || emrForm.diagnosis
-      emrForm.content = content.content || emrForm.content
-    } catch (e) {
-      emrForm.content = tpl.content
+    // 解析模板内容 - 支持 "标签: 内容" 格式
+    const parseTemplateContent = (text) => {
+      const result = {
+        symptom: '',
+        presentHistory: '',
+        pastHistory: '',
+        physicalExam: '',
+        diagnosis: '',
+        treatment: ''
+      }
+      
+      // 定义字段映射: 模板标签 -> 字段名
+      const fieldMap = {
+        '主诉': 'symptom',
+        '现病史': 'presentHistory',
+        '既往史': 'pastHistory',
+        '查体': 'physicalExam',
+        '诊断': 'diagnosis',
+        '处理': 'treatment'
+      }
+      
+      // 按行分割
+      const lines = text.split('\n')
+      let currentField = null
+      
+      for (const line of lines) {
+        // 检查是否是新字段开始 (格式: "标签: 内容" 或 "标签:内容")
+        let matched = false
+        for (const [label, field] of Object.entries(fieldMap)) {
+          const regex = new RegExp(`^${label}[：:]\\s*(.*)$`)
+          const match = line.match(regex)
+          if (match) {
+            currentField = field
+            result[field] = match[1].trim()
+            matched = true
+            break
+          }
+        }
+        
+        // 如果不是新字段，追加到当前字段
+        if (!matched && currentField && line.trim()) {
+          result[currentField] += '\n' + line.trim()
+        }
+      }
+      
+      return result
     }
+    
+    const parsed = parseTemplateContent(tpl.content)
+    
+    // 更新 emrForm
+    emrForm.symptom = parsed.symptom || emrForm.symptom
+    emrForm.diagnosis = parsed.diagnosis || emrForm.diagnosis
+    emrForm.content = tpl.content
+    
+    // 更新电子病历模板数据
+    emrTemplateData.value = {
+      ...emrTemplateData.value,
+      symptom: parsed.symptom || emrTemplateData.value.symptom,
+      presentHistory: parsed.presentHistory || emrTemplateData.value.presentHistory,
+      pastHistory: parsed.pastHistory || emrTemplateData.value.pastHistory,
+      physicalExam: parsed.physicalExam || emrTemplateData.value.physicalExam,
+      diagnosis: parsed.diagnosis || emrTemplateData.value.diagnosis,
+      treatment: parsed.treatment || emrTemplateData.value.treatment
+    }
+    
     message.success('已应用病历模板')
   } else {
     message.info('处方模板暂未实现')
@@ -665,11 +700,15 @@ const saveEmr = async () => {
   
   saving.value = true
   try {
+    // 只提交新的检查和处方（没有 orderId/presId 的是新项目）
+    const newPrescriptions = prescriptions.value.filter(p => p.drugId && !p.presId)
+    const newLabOrders = labOrders.value.filter(l => l.itemName && !l.orderId)
+    
     await emrApi.save({
       regId: currentPatient.value.regId,
       ...emrForm,
-      prescriptions: prescriptions.value.filter(p => p.drugId),
-      labOrders: labOrders.value.filter(l => l.itemName && !l.orderId) // Only new lab orders
+      prescriptions: newPrescriptions,
+      labOrders: newLabOrders
     })
     message.success('保存成功')
     
@@ -690,6 +729,10 @@ const saveEmrFromTemplate = async () => {
   saving.value = true
   try {
     const templateData = emrTemplateData.value
+    // 只提交新的检查和处方（没有 orderId/presId 的是新项目）
+    const newPrescriptions = prescriptions.value.filter(p => p.drugId && !p.presId)
+    const newLabOrders = labOrders.value.filter(l => l.itemName && !l.orderId)
+    
     await emrApi.save({
       regId: currentPatient.value.regId,
       symptom: templateData.symptom || '',
@@ -700,8 +743,8 @@ const saveEmrFromTemplate = async () => {
         templateData.physicalExam ? `查体：${templateData.physicalExam}` : '',
         templateData.treatment ? `处理：${templateData.treatment}` : ''
       ].filter(Boolean).join('\n\n'),
-      prescriptions: prescriptions.value.filter(p => p.drugId),
-      labOrders: labOrders.value.filter(l => l.itemName && !l.orderId)
+      prescriptions: newPrescriptions,
+      labOrders: newLabOrders
     })
     message.success('保存成功')
     
@@ -776,27 +819,28 @@ const printLabOrders = () => {
   }, 300)
 }
 
-// 生成病历打印HTML
+// 生成病历打印HTML - 黑白打印格式
 const generateEmrHtml = (data) => {
   const now = new Date()
   return `<!DOCTYPE html>
 <html><head><meta charset="utf-8"><title>门诊病历</title>
 <style>
   @page { margin: 15mm; size: A4; }
-  body { font-family: 'SimSun', '宋体', serif; font-size: 12pt; line-height: 1.8; }
+  @media print { * { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+  body { font-family: 'SimSun', '宋体', serif; font-size: 12pt; line-height: 1.8; color: #000; }
   .paper { max-width: 210mm; margin: 0 auto; }
   .header { text-align: center; margin-bottom: 20px; }
-  .header h1 { font-size: 22pt; margin: 0 0 10px 0; }
+  .header h1 { font-size: 22pt; margin: 0 0 10px 0; font-weight: bold; }
   .header h2 { font-size: 16pt; margin: 0; letter-spacing: 5px; }
-  hr { border: none; border-top: 1px solid #333; margin: 10px 0; }
+  hr { border: none; border-top: 1px solid #000; margin: 10px 0; }
   .info-row { margin: 8px 0; }
   .info-row span { margin-right: 20px; }
-  .info-row u { text-decoration: none; border-bottom: 1px solid #333; padding: 0 10px; }
+  .info-row u { text-decoration: none; border-bottom: 1px solid #000; padding: 0 10px; }
   .block { margin: 15px 0; }
   .block-title { font-weight: bold; margin-bottom: 5px; }
   .block-content { padding-left: 20px; white-space: pre-wrap; }
-  .diagnosis { color: #c00; font-weight: bold; }
-  .signature { margin-top: 30px; padding-top: 15px; border-top: 1px solid #ccc; }
+  .diagnosis .block-title { border-bottom: 1px solid #000; display: inline-block; }
+  .signature { margin-top: 30px; padding-top: 15px; border-top: 1px solid #000; }
 </style></head><body>
 <div class="paper">
   <div class="header">
@@ -825,9 +869,9 @@ const generateEmrHtml = (data) => {
     <div class="block-title">现病史</div>
     <div class="block-content">${data.presentHistory || emrForm.content || '-'}</div>
   </div>
-  <div class="block">
-    <div class="block-title diagnosis">诊 断</div>
-    <div class="block-content diagnosis">${data.diagnosis || emrForm.diagnosis || '-'}</div>
+  <div class="block diagnosis">
+    <div class="block-title">诊 断</div>
+    <div class="block-content">${data.diagnosis || emrForm.diagnosis || '-'}</div>
   </div>
   <div class="block">
     <div class="block-title">处 理</div>
@@ -841,7 +885,7 @@ const generateEmrHtml = (data) => {
 </body></html>`
 }
 
-// 生成处方笺打印HTML
+// 生成处方笺打印HTML - 黑白打印格式（符合中国医院处方笺标准）
 const generatePrescriptionHtml = (items) => {
   const now = new Date()
   const dateStr = `${now.getFullYear()}年${now.getMonth() + 1}月${now.getDate()}日`
@@ -861,26 +905,27 @@ const generatePrescriptionHtml = (items) => {
 <html><head><meta charset="utf-8"><title>处方笺</title>
 <style>
   @page { margin: 10mm; size: A5; }
-  body { font-family: 'SimSun', '宋体', serif; font-size: 11pt; margin: 0; padding: 10mm; }
-  .paper { background: #c8f7c5; padding: 15px; border: 2px solid #333; }
+  @media print { * { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+  body { font-family: 'SimSun', '宋体', serif; font-size: 11pt; margin: 0; padding: 10mm; color: #000; }
+  .paper { background: #fff; padding: 15px; border: 2px solid #000; }
   .header { text-align: center; margin-bottom: 10px; position: relative; }
   .dept-label { position: absolute; right: 10px; top: 0; font-size: 12pt; }
-  .hospital-name { font-size: 16pt; margin: 0 0 5px 0; }
+  .hospital-name { font-size: 16pt; margin: 0 0 5px 0; font-weight: bold; }
   .doc-title { font-size: 14pt; margin: 0; }
   .fee-row { margin: 5px 0; font-size: 10pt; }
   .fee-row label { margin-right: 10px; }
   .info-row { margin: 5px 0; }
   .field-item { margin-right: 15px; }
   .field-item u { text-decoration: none; border-bottom: 1px solid #000; padding: 0 8px; }
-  .rx-section { margin: 10px 0; min-height: 150px; border: 1px solid #333; padding: 10px; background: #fff; }
-  .rx-header { font-size: 20pt; font-family: 'Times New Roman', serif; margin-bottom: 8px; }
+  .rx-section { margin: 10px 0; min-height: 150px; border: 1px solid #000; padding: 10px; background: #fff; }
+  .rx-header { font-size: 20pt; font-family: 'Times New Roman', serif; margin-bottom: 8px; font-weight: bold; }
   .drug-item { margin: 8px 0; }
   .drug-index { margin-right: 5px; }
   .drug-name { font-weight: bold; margin-right: 8px; }
-  .drug-spec { margin-right: 8px; color: #666; }
+  .drug-spec { margin-right: 8px; }
   .drug-quantity { margin-left: 15px; }
-  .drug-usage { margin-left: 20px; color: #666; font-size: 10pt; }
-  .signature { margin-top: 10px; padding-top: 10px; border-top: 1px solid #333; }
+  .drug-usage { margin-left: 20px; font-size: 10pt; }
+  .signature { margin-top: 10px; padding-top: 10px; border-top: 1px solid #000; }
   .sig-row { margin: 8px 0; display: flex; justify-content: space-between; }
 </style></head><body>
 <div class="paper">
@@ -926,7 +971,7 @@ const generatePrescriptionHtml = (items) => {
 </body></html>`
 }
 
-// 生成检查申请单打印HTML
+// 生成检查申请单打印HTML - 黑白打印格式
 const generateLabHtml = (items) => {
   const now = new Date()
   const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
@@ -945,16 +990,17 @@ const generateLabHtml = (items) => {
 <html><head><meta charset="utf-8"><title>检查申请单</title>
 <style>
   @page { margin: 15mm; size: A5; }
-  body { font-family: 'SimSun', '宋体', serif; font-size: 11pt; }
-  .paper { max-width: 148mm; margin: 0 auto; border: 1px solid #333; padding: 15px; }
+  @media print { * { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+  body { font-family: 'SimSun', '宋体', serif; font-size: 11pt; color: #000; }
+  .paper { max-width: 148mm; margin: 0 auto; border: 1px solid #000; padding: 15px; }
   .header { text-align: center; margin-bottom: 15px; }
-  .header h1 { font-size: 16pt; margin: 0 0 8px 0; }
+  .header h1 { font-size: 16pt; margin: 0 0 8px 0; font-weight: bold; }
   .header h2 { font-size: 14pt; margin: 0; }
   .info-table { width: 100%; border-collapse: collapse; margin: 10px 0; }
-  .info-table td { padding: 5px; border: 1px solid #333; }
+  .info-table td { padding: 5px; border: 1px solid #000; }
   .items-table { width: 100%; border-collapse: collapse; margin: 10px 0; }
-  .items-table th, .items-table td { padding: 6px; border: 1px solid #333; text-align: center; }
-  .items-table th { background: #f0f0f0; }
+  .items-table th, .items-table td { padding: 6px; border: 1px solid #000; text-align: center; }
+  .items-table th { background: #eee; }
   .signature { margin-top: 15px; }
 </style></head><body>
 <div class="paper">
@@ -1219,25 +1265,49 @@ const completeVisit = async () => {
         margin-bottom: 0;
         background: #fafafa;
         padding: 8px 8px 0 8px;
+        flex-shrink: 0;
+      }
+      
+      :deep(.ant-tabs-content-holder) {
+        flex: 1;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
       }
       
       :deep(.ant-tabs-content) {
         flex: 1;
-        overflow: hidden;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
         
         .ant-tabs-tabpane {
+          flex: 1;
           height: 100%;
-          overflow-y: auto;
-          padding: 0;
+          display: flex;
+          flex-direction: column;
+          overflow: hidden;
         }
+        
+        .ant-tabs-tabpane-active {
+          display: flex !important;
+        }
+      }
+      
+      .tab-extra-buttons {
+        display: flex;
+        gap: 8px;
+        padding-right: 8px;
       }
     }
     
     .tab-content {
-      padding: 20px;
-      height: 100%;
+      padding: 16px;
+      flex: 1;
       display: flex;
       flex-direction: column;
+      overflow: hidden;
+      min-height: 0;
       
       .emr-form {
         max-width: 800px;
@@ -1245,13 +1315,20 @@ const completeVisit = async () => {
         width: 100%;
       }
       
-      .emr-mode-switch {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 16px;
-        padding-bottom: 12px;
-        border-bottom: 1px solid #f0f0f0;
+      // 电子病历 tab 特殊样式
+      &.emr-tab-content {
+        .emr-editor-wrapper {
+          flex: 1;
+          overflow-y: auto;
+          min-height: 0;
+          background: #f5f5f5;
+          border-radius: 4px;
+        }
+        
+        .form-actions {
+          flex-shrink: 0;
+          margin-top: 12px;
+        }
       }
       
       .section-header {
@@ -1261,6 +1338,7 @@ const completeVisit = async () => {
         margin-bottom: 16px;
         font-weight: 600;
         font-size: 15px;
+        flex-shrink: 0;
         
         .header-actions {
           display: flex;
@@ -1275,6 +1353,7 @@ const completeVisit = async () => {
         border-radius: 4px;
         padding: 12px;
         background: #fafafa;
+        min-height: 0;
       }
       
       .lab-item {

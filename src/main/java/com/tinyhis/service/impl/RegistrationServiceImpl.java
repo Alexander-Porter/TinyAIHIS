@@ -289,6 +289,8 @@ public class RegistrationServiceImpl implements RegistrationService {
     public Registration callNext(Long doctorId) {
         // Get next from queue
         Long regId = queueService.getNextFromQueue(doctorId);
+        boolean fromQueue = regId != null;
+        
         if (regId == null) {
             // Fallback to database query - 包含急诊状态1的患者
             List<Registration> waiting = getCallablePatients(doctorId);
@@ -303,8 +305,16 @@ public class RegistrationServiceImpl implements RegistrationService {
             registration.setStatus(3); // In consultation
             registrationMapper.updateById(registration);
 
-            // Remove from queue and broadcast
-            queueService.removeFromQueue(doctorId, regId);
+            // Remove from queue
+            if (fromQueue) {
+                queueService.removeFromQueue(doctorId, regId);
+            } else {
+                // Fallback情况下也需要广播更新候诊大屏
+                SysUser doctor = sysUserMapper.selectById(doctorId);
+                if (doctor != null && doctor.getDeptId() != null) {
+                    queueService.broadcastQueueUpdate(doctor.getDeptId());
+                }
+            }
         }
 
         return registration;

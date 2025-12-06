@@ -1,13 +1,6 @@
 <template>
   <div class="emr-editor">
-    <!-- Toolbar -->
-    <div class="editor-toolbar" v-if="!readonly">
-      <a-button size="small" @click="print" title="打印">
-        <template #icon><PrinterOutlined /></template>
-      </a-button>
-      <a-divider type="vertical" />
-      <span class="toolbar-hint">双击字段可编辑</span>
-    </div>
+
 
     <!-- Editor Content - 模拟电子病历表单 -->
     <div class="editor-content" ref="editorRef">
@@ -124,7 +117,7 @@
               v-model="formData.symptom" 
               :readonly="readonly"
               placeholder="请输入主诉内容..."
-              :rows="2"
+              :rows="1"
             />
           </div>
 
@@ -134,7 +127,7 @@
               v-model="formData.presentHistory" 
               :readonly="readonly"
               placeholder="请输入现病史..."
-              :rows="4"
+              :rows="2"
             />
           </div>
 
@@ -144,7 +137,7 @@
               v-model="formData.pastHistory" 
               :readonly="readonly"
               placeholder="请输入既往史..."
-              :rows="2"
+              :rows="1"
             />
           </div>
 
@@ -154,18 +147,17 @@
               v-model="formData.physicalExam" 
               :readonly="readonly"
               placeholder="请输入查体结果..."
-              :rows="3"
+              :rows="1"
             />
           </div>
 
           <div class="content-block">
-            <div class="block-title diagnosis-title">诊 断</div>
+            <div class="block-title">诊 断</div>
             <editable-area 
               v-model="formData.diagnosis" 
               :readonly="readonly"
               placeholder="请输入诊断..."
-              :rows="2"
-              class="diagnosis-content"
+              :rows="1"
             />
           </div>
 
@@ -175,8 +167,36 @@
               v-model="formData.treatment" 
               :readonly="readonly"
               placeholder="请输入处理意见..."
-              :rows="3"
+              :rows="1"
             />
+          </div>
+
+          <!-- 检查检验信息（只读显示） -->
+          <div class="content-block" v-if="labOrders && labOrders.length > 0">
+            <div class="block-title">检查检验</div>
+            <div class="readonly-list">
+              <div class="list-item" v-for="(lab, idx) in labOrders" :key="idx">
+                <span class="item-index">{{ idx + 1 }}.</span>
+                <span class="item-name">{{ lab.itemName }}</span>
+                <span class="item-price">¥{{ lab.price || 0 }}</span>
+                <span class="item-status" :class="getLabStatusClass(lab.status)">
+                  {{ getLabStatusText(lab.status) }}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 处方信息（只读显示） -->
+          <div class="content-block" v-if="prescriptions && prescriptions.length > 0">
+            <div class="block-title">处 方</div>
+            <div class="readonly-list">
+              <div class="list-item" v-for="(pres, idx) in prescriptions" :key="idx">
+                <span class="item-index">{{ idx + 1 }}.</span>
+                <span class="item-name">{{ getDrugName(pres.drugId) }}</span>
+                <span class="item-quantity">× {{ pres.quantity }}</span>
+                <span class="item-usage">{{ pres.usageInstruction || '遵医嘱' }}</span>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -201,7 +221,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, watch, onMounted } from 'vue'
+import { ref, reactive, watch, onMounted, computed } from 'vue'
 import { PrinterOutlined } from '@ant-design/icons-vue'
 import EditableField from './EditableField.vue'
 import EditableArea from './EditableArea.vue'
@@ -210,12 +230,32 @@ const props = defineProps({
   modelValue: { type: Object, default: () => ({}) },
   readonly: { type: Boolean, default: false },
   hospitalName: { type: String, default: '清远友谊医院' },
-  patientInfo: { type: Object, default: () => ({}) }
+  patientInfo: { type: Object, default: () => ({}) },
+  labOrders: { type: Array, default: () => [] },
+  prescriptions: { type: Array, default: () => [] },
+  drugs: { type: Array, default: () => [] }
 })
 
 const emit = defineEmits(['update:modelValue', 'print'])
 
 const editorRef = ref(null)
+
+// 检查状态文字
+const getLabStatusText = (status) => {
+  const texts = { 0: '待缴费', 1: '待检查', 2: '已完成' }
+  return texts[status] || '未知'
+}
+
+const getLabStatusClass = (status) => {
+  const classes = { 0: 'status-pending', 1: 'status-processing', 2: 'status-done' }
+  return classes[status] || ''
+}
+
+// 根据drugId获取药品名称
+const getDrugName = (drugId) => {
+  const drug = props.drugs.find(d => d.drugId === drugId)
+  return drug?.name || '未知药品'
+}
 
 const formData = reactive({
   patientName: '',
@@ -314,25 +354,25 @@ defineExpose({ getData, print })
     width: 210mm;
     min-height: 297mm;
     background: #fff;
-    padding: 20mm;
+    padding: 15mm 20mm;
     box-shadow: 0 2px 12px rgba(0,0,0,0.1);
     font-family: 'SimSun', '宋体', serif;
-    font-size: 12pt;
-    line-height: 1.8;
+    font-size: 11pt;
+    line-height: 1.5;
 
     .paper-header {
       text-align: center;
-      margin-bottom: 15px;
+      margin-bottom: 8px;
 
       .hospital-name {
-        font-size: 22pt;
-        margin: 0 0 10px 0;
+        font-size: 18pt;
+        margin: 0 0 5px 0;
       }
 
       .doc-title {
-        font-size: 16pt;
+        font-size: 14pt;
         margin: 0;
-        letter-spacing: 5px;
+        letter-spacing: 3px;
       }
     }
 
@@ -349,12 +389,12 @@ defineExpose({ getData, print })
     }
 
     .patient-section {
-      margin: 15px 0;
+      margin: 8px 0;
 
       .info-line {
         display: flex;
         align-items: center;
-        margin: 8px 0;
+        margin: 4px 0;
         flex-wrap: wrap;
 
         .label {
@@ -385,24 +425,57 @@ defineExpose({ getData, print })
     }
 
     .content-section {
-      margin: 20px 0;
+      margin: 10px 0;
 
       .content-block {
-        margin: 15px 0;
+        margin: 8px 0;
 
         .block-title {
           font-weight: bold;
-          margin-bottom: 5px;
-          
-          &.diagnosis-title {
-            color: #c00;
-          }
+          margin-bottom: 2px;
+          color: #000;
         }
 
-        .diagnosis-content {
-          :deep(.editable-area) {
-            color: #c00;
-            font-weight: bold;
+        // 检查检验和处方的只读列表样式 - 无边框
+        .readonly-list {
+          padding: 5px 0;
+
+          .list-item {
+            display: flex;
+            align-items: center;
+            padding: 4px 0;
+            font-size: 11pt;
+
+            .item-index {
+              width: 24px;
+              color: #666;
+            }
+
+            .item-name {
+              flex: 1;
+              font-weight: 500;
+            }
+
+            .item-price {
+              color: #333;
+              margin: 0 15px;
+            }
+
+            .item-quantity {
+              color: #333;
+              margin: 0 10px;
+            }
+
+            .item-usage {
+              color: #666;
+              font-size: 10pt;
+            }
+
+            .item-status {
+              padding: 2px 6px;
+              font-size: 10pt;
+              color: #666;
+            }
           }
         }
       }

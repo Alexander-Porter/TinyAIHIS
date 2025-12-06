@@ -47,6 +47,8 @@ public class SecurityConfig {
                 // Patient endpoints
                 .requestMatchers("/api/registration/**").hasAnyRole("PATIENT", "ADMIN")
                 .requestMatchers("/api/payment/**").hasAnyRole("PATIENT", "ADMIN")
+                // Patients can view their own EMR records (for payment page)
+                .requestMatchers(HttpMethod.GET, "/api/emr/registration/**", "/api/emr/prescriptions/**", "/api/emr/laborders/**").hasAnyRole("PATIENT", "DOCTOR", "CHIEF", "ADMIN")
                 
                 // Doctor/Chief endpoints
                 .requestMatchers("/api/doctor/**").hasAnyRole("DOCTOR", "CHIEF", "ADMIN")
