@@ -3,8 +3,12 @@ FROM maven:3.9-eclipse-temurin-21 AS build
 WORKDIR /app
 COPY docker/settings.xml /usr/share/maven/conf/settings.xml
 COPY pom.xml .
+
+# Download dependencies first (cached if pom.xml doesn't change)
+RUN --mount=type=cache,target=/root/.m2 mvn dependency:go-offline -B
+
 COPY src ./src
-RUN mvn clean package -DskipTests
+RUN --mount=type=cache,target=/root/.m2 mvn clean package -DskipTests
 
 # Run stage
 FROM eclipse-temurin:21-jre-alpine
@@ -21,8 +25,8 @@ RUN addgroup -S tinyhis && adduser -S tinyhis -G tinyhis
 # Copy the built jar file from build stage
 COPY --from=build /app/target/tinyhis-*.jar app.jar
 
-# Create directories for knowledge base and logs
-RUN mkdir -p /app/medical-knowledge /app/logs && \
+# Create directories for knowledge base, vector index, and logs
+RUN mkdir -p /app/medical-knowledge /app/vector-index /app/logs && \
     chown -R tinyhis:tinyhis /app
 
 # Switch to non-root user

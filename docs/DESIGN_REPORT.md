@@ -633,7 +633,7 @@ spring:
   ai:
     openai:
       api-key: ${SILICONFLOW_API_KEY:}
-      base-url: https://api.siliconflow.cn/v1
+      base-url: https://api.siliconflow.cn
 
 # JWT配置
 jwt:
