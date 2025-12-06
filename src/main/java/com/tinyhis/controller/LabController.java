@@ -4,6 +4,7 @@ import com.tinyhis.dto.LabResultRequest;
 import com.tinyhis.dto.Result;
 import com.tinyhis.entity.LabOrder;
 import com.tinyhis.service.LabService;
+import com.tinyhis.annotation.CheckUserAccess;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -59,6 +60,7 @@ public class LabController {
      * Get lab orders by patient
      */
     @GetMapping("/patient/{patientId}")
+    @CheckUserAccess(paramName = "patientId")
     public Result<List<LabOrder>> getPatientOrders(@PathVariable Long patientId) {
         List<LabOrder> orders = labService.getOrdersByPatient(patientId);
         return Result.success(orders);

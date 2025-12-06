@@ -5,6 +5,7 @@ import com.tinyhis.dto.PrescriptionDetailDTO;
 import com.tinyhis.dto.Result;
 import com.tinyhis.entity.*;
 import com.tinyhis.service.EmrService;
+import com.tinyhis.annotation.CheckUserAccess;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
@@ -44,6 +45,7 @@ public class EmrController {
      * Get medical records by patient
      */
     @GetMapping("/patient/{patientId}")
+    @CheckUserAccess(paramName = "patientId")
     public Result<List<MedicalRecord>> getPatientRecords(@PathVariable Long patientId) {
         List<MedicalRecord> records = emrService.getRecordsByPatient(patientId);
         return Result.success(records);

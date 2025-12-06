@@ -46,6 +46,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     
                     // Create authentication token with role
                     UserPrincipal principal = new UserPrincipal(userId, username, role, userType);
+                    log.info("Authenticated user: {}, role: {}, authority: ROLE_{}", username, role, role);
                     UsernamePasswordAuthenticationToken authentication = 
                         new UsernamePasswordAuthenticationToken(
                             principal, 
