@@ -11,4 +11,5 @@ public class RegistrationDetailDTO extends Registration {
     private String doctorName;
     private String scheduleDate; // yyyy-MM-dd
     private String shift; // 上午/下午
+    private Boolean hasPendingLabs; // 是否有待完成的检查
 }

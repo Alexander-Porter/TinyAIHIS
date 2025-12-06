@@ -38,6 +38,8 @@ public class RegistrationServiceImpl implements RegistrationService {
     private final QueueService queueService;
     private final DepartmentMapper departmentMapper;
     private final SysUserMapper sysUserMapper;
+    private final com.tinyhis.mapper.MedicalRecordMapper medicalRecordMapper;
+    private final com.tinyhis.mapper.LabOrderMapper labOrderMapper;
 
     private static final BigDecimal REGISTRATION_FEE = new BigDecimal("50.00");
 
@@ -136,6 +138,24 @@ public class RegistrationServiceImpl implements RegistrationService {
                     dto.setDoctorName(doctor.getRealName());
                 }
             }
+            
+            // Check for pending labs if status is 2 (Waiting/Paused)
+            if (reg.getStatus() == 2) {
+                com.tinyhis.entity.MedicalRecord record = medicalRecordMapper.selectOne(
+                    new LambdaQueryWrapper<com.tinyhis.entity.MedicalRecord>()
+                        .eq(com.tinyhis.entity.MedicalRecord::getRegId, reg.getRegId()));
+                
+                if (record != null) {
+                    Long pendingCount = labOrderMapper.selectCount(
+                        new LambdaQueryWrapper<com.tinyhis.entity.LabOrder>()
+                            .eq(com.tinyhis.entity.LabOrder::getRecordId, record.getRecordId())
+                            .lt(com.tinyhis.entity.LabOrder::getStatus, 2));
+                    if (pendingCount > 0) {
+                        dto.setHasPendingLabs(true);
+                    }
+                }
+            }
+            
             return dto;
         }).collect(Collectors.toList());
     }

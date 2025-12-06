@@ -49,9 +49,17 @@
           <van-icon name="friends-o" />
         </div>
         <div class="banner-content">
-          <div class="title">{{ waitingRegs.length > 1 ? `${waitingRegs.length}个号正在候诊` : `${waitingRegs[0].deptName || '门诊'} 候诊中` }}</div>
+          <div class="title">
+            <span v-if="waitingRegs[0].hasPendingLabs" style="color: #faad14">
+              <van-icon name="todo-list-o" /> 请前往检查/缴费
+            </span>
+            <span v-else>
+              {{ waitingRegs.length > 1 ? `${waitingRegs.length}个号正在候诊` : `${waitingRegs[0].deptName || '门诊'} 候诊中` }}
+            </span>
+          </div>
           <div class="sub" v-if="waitingRegs.length === 1">
-            排队号 {{ waitingRegs[0].queueNumber }}，请耐心等候
+            <span v-if="waitingRegs[0].hasPendingLabs">医生已开具检查单，请完成后回诊室</span>
+            <span v-else>排队号 {{ waitingRegs[0].queueNumber }}，请耐心等候</span>
           </div>
           <div class="sub" v-else>点击查看详情</div>
         </div>
