@@ -28,47 +28,8 @@
             <MedicineBoxOutlined style="font-size: 1em;"/>
           </div>
           <div class="card-content">
-            <div class="title">医生工作站</div>
-            <div class="desc">接诊处理 / 电子病历 / 处方</div>
-          </div>
-          <div class="arrow">
-            <ArrowRightOutlined style="font-size: 1em;"/>
-          </div>
-        </div>
-        
-        <div class="entry-card" @click="router.push('/lab/login')">
-          <div class="icon-wrapper lab">
-            <ExperimentOutlined style="font-size: 1em;"/>
-          </div>
-          <div class="card-content">
-            <div class="title">检验中心</div>
-            <div class="desc">样本接收 / 结果录入 / 审核</div>
-          </div>
-          <div class="arrow">
-            <ArrowRightOutlined style="font-size: 1em;"/>
-          </div>
-        </div>
-        
-        <div class="entry-card" @click="router.push('/pharmacy/login')">
-          <div class="icon-wrapper pharmacy">
-            <ShopOutlined style="font-size: 1em;"/>
-          </div>
-          <div class="card-content">
-            <div class="title">智慧药房</div>
-            <div class="desc">处方审核 / 药品调剂 / 库存</div>
-          </div>
-          <div class="arrow">
-            <ArrowRightOutlined style="font-size: 1em;"/>
-          </div>
-        </div>
-        
-        <div class="entry-card" @click="router.push('/admin/login')">
-          <div class="icon-wrapper admin">
-            <SettingOutlined style="font-size: 1em;"/>
-          </div>
-          <div class="card-content">
-            <div class="title">系统管理</div>
-            <div class="desc">人员排班 / 数据审计 / 配置</div>
+            <div class="title">员工登录</div>
+            <div class="desc">医生 / 药房 / 检验 / 管理员</div>
           </div>
           <div class="arrow">
             <ArrowRightOutlined style="font-size: 1em;"/>

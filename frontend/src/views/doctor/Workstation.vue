@@ -111,7 +111,7 @@
                       ref="emrEditorRef"
                       v-model="emrTemplateData"
                       :patientInfo="currentPatientInfo"
-                      :hospitalName="'清远友谊医院'"
+                      :hospitalName="'武汉大学医院'"
                       :labOrders="labOrders"
                       :prescriptions="prescriptions"
                       :drugs="drugs"
@@ -251,8 +251,15 @@
                           <div class="detail-row" v-if="record.labOrders?.length">
                             <label>检查项目：</label>
                             <div class="sub-list">
-                              <div v-for="lab in record.labOrders" :key="lab.orderId">
-                                {{ lab.itemName }} - {{ lab.resultText || '无结果' }}
+                              <div v-for="lab in record.labOrders" :key="lab.orderId" class="history-lab-item">
+                                <span class="lab-name">{{ lab.itemName }}</span>
+                                <div class="lab-actions">
+                                  <span v-if="!lab.resultText" class="no-result">无结果</span>
+                                  <template v-else>
+                                    <a-button type="link" size="small" @click="viewReport(lab)">查看报告</a-button>
+                                    <a-button type="link" size="small" @click="insertLabResult(lab)">引用</a-button>
+                                  </template>
+                                </div>
                               </div>
                             </div>
                           </div>
@@ -279,23 +286,34 @@
         </div>
       </div>
 
-      <!-- Right: Templates -->
+      <!-- Right: Tools -->
       <div class="right-panel" v-if="currentPatient">
-        <div class="panel-card template-panel">
-          <div class="panel-header">常用模板</div>
-          <div class="template-list">
-            <div class="template-item" v-for="tpl in templates" :key="tpl.tplId" @click="applyTemplate(tpl)">
-              <div class="tpl-name">{{ tpl.name }}</div>
-              <a-tag size="small">{{ tpl.type === 'EMR' ? '病历' : '处方' }}</a-tag>
-            </div>
-            <div v-if="templates.length === 0" class="empty-tip">暂无模板</div>
-          </div>
+        <div class="panel-card right-tools-panel">
+          <a-tabs type="card" size="small" class="right-tabs">
+            <a-tab-pane key="ai" tab="AI助手">
+              <DoctorAiChat 
+                :initialQuery="aiInitialQuery" 
+                :patientId="currentPatient?.patientId"
+                @apply="applyAiSuggestion" 
+                style="height: calc(100vh - 180px); display: flex; flex-direction: column;"
+              />
+            </a-tab-pane>
+            <a-tab-pane key="tpl" tab="常用模板">
+              <div class="template-list">
+                <div class="template-item" v-for="tpl in templates" :key="tpl.tplId" @click="applyTemplate(tpl)">
+                  <div class="tpl-name">{{ tpl.name }}</div>
+                  <a-tag size="small">{{ tpl.type === 'EMR' ? '病历' : '处方' }}</a-tag>
+                </div>
+                <div v-if="templates.length === 0" class="empty-tip">暂无模板</div>
+              </div>
+            </a-tab-pane>
+          </a-tabs>
         </div>
       </div>
     </div>
 
     <!-- Report Viewer Modal -->
-    <a-modal v-model:open="reportVisible" title="检查报告" :footer="null" width="800px">
+    <a-modal v-model:open="reportVisible" title="检查报告" width="800px">
       <div class="report-viewer" v-if="currentReport">
         <div class="report-header">
           <h3>{{ currentReport.itemName }}</h3>
@@ -303,20 +321,31 @@
         </div>
         <div class="report-body" v-html="currentReport.resultText"></div>
       </div>
+      <template #footer>
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <span style="color: #999; font-size: 12px;">提示：选中报告内容可插入到病历</span>
+          <div>
+            <a-button @click="reportVisible = false">关闭</a-button>
+            <a-button type="primary" @click="insertReportSelection">插入选中内容到查体</a-button>
+          </div>
+        </div>
+      </template>
     </a-modal>
   </div>
 </template>
 
 <script setup>
 import { ref, reactive, onMounted, onBeforeUnmount, computed } from 'vue'
-import { BellOutlined, DeleteOutlined, SaveOutlined, CheckOutlined, PauseOutlined, PlayCircleOutlined, PrinterOutlined } from '@ant-design/icons-vue'
+import { BellOutlined, DeleteOutlined, SaveOutlined, CheckOutlined, PauseOutlined, PlayCircleOutlined, PrinterOutlined, RobotOutlined } from '@ant-design/icons-vue'
 import { message } from 'ant-design-vue'
-import { doctorApi, emrApi, pharmacyApi } from '@/utils/api'
+import { doctorApi, emrApi, pharmacyApi, checkItemApi } from '@/utils/api'
 import { useUserStore } from '@/stores/user'
 import SockJS from 'sockjs-client'
 import { Client } from '@stomp/stompjs'
 import EmrEditor from '@/components/EmrEditor.vue'
 import PrintTemplates from '@/components/PrintTemplates.vue'
+import DoctorAiChat from '@/components/DoctorAiChat.vue'
+import QRCode from 'qrcode'
 
 const userStore = useUserStore()
 const doctorId = userStore.userId
@@ -332,6 +361,8 @@ const saving = ref(false)
 const loadingHistory = ref(false)
 const reportVisible = ref(false)
 const currentReport = ref(null)
+const aiDrawerVisible = ref(false)
+const aiInitialQuery = ref('')
 
 const drugs = ref([])
 const templates = ref([])
@@ -395,7 +426,7 @@ const currentPatientInfo = computed(() => {
     patientName: currentPatient.value.patientName,
     gender: currentPatient.value.gender,
     age: currentPatient.value.age,
-    deptName: userStore.userInfo?.deptName || '',
+    deptName: currentPatient.value.deptName,
     regId: currentPatient.value.regId,
     recordNo: currentPatient.value.regId,
     visitTime: new Date().toLocaleString('zh-CN')
@@ -403,23 +434,36 @@ const currentPatientInfo = computed(() => {
 })
 
 // Common lab items for autocomplete
-const commonLabItems = [
-  { value: '血常规', price: 20 },
-  { value: '尿常规', price: 15 },
-  { value: '肝功能', price: 80 },
-  { value: '肾功能', price: 60 },
-  { value: '心电图', price: 30 },
-  { value: '胸部CT', price: 280 },
-  { value: '腹部B超', price: 120 },
-  { value: '核磁共振(MRI)', price: 600 }
-]
+const commonLabItems = ref([])
 
 // Lifecycle
+const openAiAssistant = () => {
+  // Build initial query from current EMR
+  let query = ''
+  if (emrForm.symptom) query += `主诉：${emrForm.symptom}\n`
+  if (emrForm.content) query += `现病史：${emrForm.content}\n`
+  if (emrForm.diagnosis) query += `初步诊断：${emrForm.diagnosis}\n`
+  
+  if (!query) {
+    query = '患者刚入院，请协助问诊。'
+  }
+  
+  aiInitialQuery.value = query
+  aiDrawerVisible.value = true
+}
+
+const applyAiSuggestion = (content) => {
+  // Simple append for now
+  emrForm.content += '\n\n' + content
+  message.success('已引用到病历')
+}
+
 onMounted(async () => {
   await Promise.all([
     loadPatients(),
     loadDrugs(),
-    loadTemplates()
+    loadTemplates(),
+    loadCheckItems()
   ])
   connectWebSocket()
 })
@@ -479,6 +523,19 @@ const loadDrugs = async () => {
   }
 }
 
+const loadCheckItems = async () => {
+  try {
+    const items = await checkItemApi.getAll()
+    commonLabItems.value = items.map(item => ({
+      value: item.itemName,
+      price: item.price,
+      label: item.itemName
+    }))
+  } catch (e) {
+    console.error('Failed to load check items', e)
+  }
+}
+
 const loadTemplates = async () => {
   try {
     const deptId = userStore.userInfo?.deptId
@@ -506,12 +563,24 @@ const selectPatient = async (patient) => {
   
   // Reset form
   Object.assign(emrForm, { symptom: '', diagnosis: '', content: '' })
+  emrTemplateData.value = {}
   
   // Load existing EMR data if any
   if (patient.medicalRecord) {
     emrForm.symptom = patient.medicalRecord.symptom || ''
     emrForm.diagnosis = patient.medicalRecord.diagnosis || ''
     emrForm.content = patient.medicalRecord.content || ''
+    
+    // Parse content back to template data
+    const parsed = parseEmrContent(patient.medicalRecord.content)
+    emrTemplateData.value = {
+      symptom: patient.medicalRecord.symptom || parsed.symptom || '',
+      diagnosis: patient.medicalRecord.diagnosis || parsed.diagnosis || '',
+      presentHistory: parsed.presentHistory || '',
+      pastHistory: parsed.pastHistory || '',
+      physicalExam: parsed.physicalExam || '',
+      treatment: parsed.treatment || ''
+    }
   }
   
   // Load prescriptions and lab orders
@@ -542,6 +611,85 @@ const viewReport = (lab) => {
   } else {
     message.info('暂无报告内容')
   }
+}
+
+const insertReportSelection = () => {
+  const selection = window.getSelection()
+  if (!selection || selection.rangeCount === 0 || selection.isCollapsed) {
+    message.warning('请先在报告中选中要插入的内容')
+    return
+  }
+  
+  const range = selection.getRangeAt(0)
+  const fragment = range.cloneContents()
+  
+  // Parse fragment to text
+  const text = parseHtmlToText(fragment).trim()
+  
+  if (!text) {
+    message.warning('选中的内容为空')
+    return
+  }
+  
+  // Insert into physical exam
+  if (!emrTemplateData.value.physicalExam) {
+    emrTemplateData.value.physicalExam = ''
+  }
+  
+  if (emrTemplateData.value.physicalExam) {
+    emrTemplateData.value.physicalExam += '\n' + text
+  } else {
+    emrTemplateData.value.physicalExam = text
+  }
+  
+  message.success('已插入到查体')
+}
+
+const parseHtmlToText = (node) => {
+  let text = ''
+  
+  if (node.nodeType === Node.TEXT_NODE) {
+    return node.textContent
+  }
+  
+  if (node.nodeType === Node.ELEMENT_NODE) {
+    const tagName = node.tagName.toLowerCase()
+    const isBlock = ['div', 'p', 'tr', 'h1', 'h2', 'h3', 'li', 'br'].includes(tagName)
+    
+    if (tagName === 'br') {
+      return '\n'
+    }
+    
+    for (let child of node.childNodes) {
+      text += parseHtmlToText(child)
+    }
+    
+    if (tagName === 'tr') {
+      text += '\n'
+    } else if (tagName === 'td' || tagName === 'th') {
+      text += '  '
+    } else if (isBlock) {
+      text += '\n'
+    }
+  } else if (node.nodeType === Node.DOCUMENT_FRAGMENT_NODE) {
+     for (let child of node.childNodes) {
+      text += parseHtmlToText(child)
+    }
+  }
+  
+  // Clean up multiple newlines
+  return text.replace(/\n\s*\n/g, '\n')
+}
+
+const insertLabResult = (lab) => {
+  const text = `${lab.itemName}: ${lab.resultText || '无结果'}`;
+  // Append to physicalExam (查体) or create a new line
+  if (emrTemplateData.value.physicalExam) {
+    emrTemplateData.value.physicalExam += `\n${text}`;
+  } else {
+    emrTemplateData.value.physicalExam = text;
+  }
+  message.success('已插入检查结果');
 }
 
 const callNext = async () => {
@@ -605,7 +753,7 @@ const addLabOrder = () => {
 }
 
 const onLabSelect = (val, item) => {
-  const match = commonLabItems.find(i => i.value === val)
+  const match = commonLabItems.value.find(i => i.value === val)
   if (match) {
     item.price = match.price
   }
@@ -621,57 +769,59 @@ const getLabStatusText = (status) => {
   return texts[status] || '未知'
 }
 
-const applyTemplate = (tpl) => {
-  if (tpl.type === 'EMR') {
-    // 解析模板内容 - 支持 "标签: 内容" 格式
-    const parseTemplateContent = (text) => {
-      const result = {
-        symptom: '',
-        presentHistory: '',
-        pastHistory: '',
-        physicalExam: '',
-        diagnosis: '',
-        treatment: ''
+// 解析病历内容 - 支持 "标签: 内容" 格式
+const parseEmrContent = (text) => {
+  const result = {
+    symptom: '',
+    presentHistory: '',
+    pastHistory: '',
+    physicalExam: '',
+    diagnosis: '',
+    treatment: ''
+  }
+  
+  if (!text) return result
+
+  // 定义字段映射: 模板标签 -> 字段名
+  const fieldMap = {
+    '主诉': 'symptom',
+    '现病史': 'presentHistory',
+    '既往史': 'pastHistory',
+    '查体': 'physicalExam',
+    '诊断': 'diagnosis',
+    '处理': 'treatment'
+  }
+  
+  // 按行分割
+  const lines = text.split('\n')
+  let currentField = null
+  
+  for (const line of lines) {
+    // 检查是否是新字段开始 (格式: "标签: 内容" 或 "标签:内容")
+    let matched = false
+    for (const [label, field] of Object.entries(fieldMap)) {
+      const regex = new RegExp(`^${label}[：:]\\s*(.*)$`)
+      const match = line.match(regex)
+      if (match) {
+        currentField = field
+        result[field] = match[1].trim()
+        matched = true
+        break
       }
-      
-      // 定义字段映射: 模板标签 -> 字段名
-      const fieldMap = {
-        '主诉': 'symptom',
-        '现病史': 'presentHistory',
-        '既往史': 'pastHistory',
-        '查体': 'physicalExam',
-        '诊断': 'diagnosis',
-        '处理': 'treatment'
-      }
-      
-      // 按行分割
-      const lines = text.split('\n')
-      let currentField = null
-      
-      for (const line of lines) {
-        // 检查是否是新字段开始 (格式: "标签: 内容" 或 "标签:内容")
-        let matched = false
-        for (const [label, field] of Object.entries(fieldMap)) {
-          const regex = new RegExp(`^${label}[：:]\\s*(.*)$`)
-          const match = line.match(regex)
-          if (match) {
-            currentField = field
-            result[field] = match[1].trim()
-            matched = true
-            break
-          }
-        }
-        
-        // 如果不是新字段，追加到当前字段
-        if (!matched && currentField && line.trim()) {
-          result[currentField] += '\n' + line.trim()
-        }
-      }
-      
-      return result
     }
     
-    const parsed = parseTemplateContent(tpl.content)
+    // 如果不是新字段，追加到当前字段
+    if (!matched && currentField && line.trim()) {
+      result[currentField] += '\n' + line.trim()
+    }
+  }
+  
+  return result
+}
+
+const applyTemplate = (tpl) => {
+  if (tpl.type === 'EMR') {
+    const parsed = parseEmrContent(tpl.content)
     
     // 更新 emrForm
     emrForm.symptom = parsed.symptom || emrForm.symptom
@@ -700,13 +850,31 @@ const saveEmr = async () => {
   
   saving.value = true
   try {
+    // Construct content from template data to ensure we have the latest edits
+    const templateData = emrTemplateData.value
+    const content = [
+        templateData.presentHistory ? `现病史：${templateData.presentHistory}` : '',
+        templateData.pastHistory ? `既往史：${templateData.pastHistory}` : '',
+        templateData.physicalExam ? `查体：${templateData.physicalExam}` : '',
+        templateData.treatment ? `处理：${templateData.treatment}` : ''
+      ].filter(Boolean).join('\n\n')
+
+    // Use template data if available, otherwise fallback to emrForm
+    const symptom = templateData.symptom || emrForm.symptom
+    const diagnosis = templateData.diagnosis || emrForm.diagnosis
+    // If template data produced content, use it. Otherwise use emrForm.content (which might be the original loaded content)
+    // But if user cleared the editor, content would be empty string. We should probably trust templateData if it was initialized.
+    const finalContent = content || emrForm.content
+
     // 只提交新的检查和处方（没有 orderId/presId 的是新项目）
     const newPrescriptions = prescriptions.value.filter(p => p.drugId && !p.presId)
     const newLabOrders = labOrders.value.filter(l => l.itemName && !l.orderId)
     
     await emrApi.save({
       regId: currentPatient.value.regId,
-      ...emrForm,
+      symptom: symptom,
+      diagnosis: diagnosis,
+      content: finalContent,
       prescriptions: newPrescriptions,
       labOrders: newLabOrders
     })
@@ -762,9 +930,9 @@ const printEmr = () => {
   handleEmrPrint(emrTemplateData.value)
 }
 
-const handleEmrPrint = (data) => {
+const handleEmrPrint = async (data) => {
   const printWindow = window.open('', '_blank')
-  printWindow.document.write(generateEmrHtml(data))
+  printWindow.document.write(await generateEmrHtml(data))
   printWindow.document.close()
   printWindow.focus()
   setTimeout(() => {
@@ -774,7 +942,7 @@ const handleEmrPrint = (data) => {
 }
 
 // 打印处方
-const printPrescription = () => {
+const printPrescription = async () => {
   if (prescriptions.value.length === 0) {
     message.warning('暂无处方可打印')
     return
@@ -793,7 +961,7 @@ const printPrescription = () => {
   })
   
   const printWindow = window.open('', '_blank')
-  printWindow.document.write(generatePrescriptionHtml(prescriptionItems))
+  printWindow.document.write(await generatePrescriptionHtml(prescriptionItems))
   printWindow.document.close()
   printWindow.focus()
   setTimeout(() => {
@@ -803,14 +971,14 @@ const printPrescription = () => {
 }
 
 // 打印检查申请单
-const printLabOrders = () => {
+const printLabOrders = async () => {
   if (labOrders.value.length === 0) {
     message.warning('暂无检查项目可打印')
     return
   }
   
   const printWindow = window.open('', '_blank')
-  printWindow.document.write(generateLabHtml(labOrders.value))
+  printWindow.document.write(await generateLabHtml(labOrders.value))
   printWindow.document.close()
   printWindow.focus()
   setTimeout(() => {
@@ -820,15 +988,19 @@ const printLabOrders = () => {
 }
 
 // 生成病历打印HTML - 黑白打印格式
-const generateEmrHtml = (data) => {
+const generateEmrHtml = async (data) => {
   const now = new Date()
+  const regId = currentPatient.value?.regId || ''
+  const qrUrl = `http://localhost:5173/patient/payment?regId=${regId}`
+  const qrSrc = await QRCode.toDataURL(qrUrl, { width: 100, margin: 0 })
+  
   return `<!DOCTYPE html>
 <html><head><meta charset="utf-8"><title>门诊病历</title>
 <style>
   @page { margin: 15mm; size: A4; }
   @media print { * { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
   body { font-family: 'SimSun', '宋体', serif; font-size: 12pt; line-height: 1.8; color: #000; }
-  .paper { max-width: 210mm; margin: 0 auto; }
+  .paper { max-width: 210mm; margin: 0 auto; position: relative; }
   .header { text-align: center; margin-bottom: 20px; }
   .header h1 { font-size: 22pt; margin: 0 0 10px 0; font-weight: bold; }
   .header h2 { font-size: 16pt; margin: 0; letter-spacing: 5px; }
@@ -841,15 +1013,22 @@ const generateEmrHtml = (data) => {
   .block-content { padding-left: 20px; white-space: pre-wrap; }
   .diagnosis .block-title { border-bottom: 1px solid #000; display: inline-block; }
   .signature { margin-top: 30px; padding-top: 15px; border-top: 1px solid #000; }
+  .qr-code { position: absolute; top: 0; right: 0; text-align: center; }
+  .qr-code img { width: 80px; height: 80px; }
+  .qr-code div { font-size: 10px; margin-top: 2px; }
 </style></head><body>
 <div class="paper">
+  <div class="qr-code">
+    <img src="${qrSrc}" />
+    <div>扫码缴费</div>
+  </div>
   <div class="header">
-    <h1>清远友谊医院</h1>
+    <h1>武汉大学医院</h1>
     <h2>门 诊 病 历</h2>
   </div>
   <div class="info-row">
     <span>科室：<u>${data.deptName || userStore.userInfo?.deptName || ''}</u></span>
-    <span>门诊号：<u>${currentPatient.value?.regId || ''}</u></span>
+    <span>门诊号：<u>${regId}</u></span>
   </div>
   <hr />
   <div class="info-row">
@@ -886,10 +1065,13 @@ const generateEmrHtml = (data) => {
 }
 
 // 生成处方笺打印HTML - 黑白打印格式（符合中国医院处方笺标准）
-const generatePrescriptionHtml = (items) => {
+const generatePrescriptionHtml = async (items) => {
   const now = new Date()
   const dateStr = `${now.getFullYear()}年${now.getMonth() + 1}月${now.getDate()}日`
   const total = items.reduce((sum, item) => sum + (item.price || 0) * (item.quantity || 1), 0)
+  const regId = currentPatient.value?.regId || ''
+  const qrUrl = `http://localhost:5173/patient/payment?regId=${regId}`
+  const qrSrc = await QRCode.toDataURL(qrUrl, { width: 100, margin: 0 })
   
   const drugListHtml = items.map((item, idx) => `
     <div class="drug-item">
@@ -907,7 +1089,7 @@ const generatePrescriptionHtml = (items) => {
   @page { margin: 10mm; size: A5; }
   @media print { * { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
   body { font-family: 'SimSun', '宋体', serif; font-size: 11pt; margin: 0; padding: 10mm; color: #000; }
-  .paper { background: #fff; padding: 15px; border: 2px solid #000; }
+  .paper { background: #fff; padding: 15px; border: 2px solid #000; position: relative; }
   .header { text-align: center; margin-bottom: 10px; position: relative; }
   .dept-label { position: absolute; right: 10px; top: 0; font-size: 12pt; }
   .hospital-name { font-size: 16pt; margin: 0 0 5px 0; font-weight: bold; }
@@ -927,11 +1109,18 @@ const generatePrescriptionHtml = (items) => {
   .drug-usage { margin-left: 20px; font-size: 10pt; }
   .signature { margin-top: 10px; padding-top: 10px; border-top: 1px solid #000; }
   .sig-row { margin: 8px 0; display: flex; justify-content: space-between; }
+  .qr-code { position: absolute; top: 10px; right: 10px; text-align: center; z-index: 10; }
+  .qr-code img { width: 60px; height: 60px; }
+  .qr-code div { font-size: 9px; margin-top: 2px; background: #fff; }
 </style></head><body>
 <div class="paper">
+  <div class="qr-code">
+    <img src="${qrSrc}" />
+    <div>扫码缴费</div>
+  </div>
   <div class="header">
     <div class="dept-label">${userStore.userInfo?.deptName || ''}</div>
-    <div class="hospital-name">清远友谊医院</div>
+    <div class="hospital-name">武汉大学医院</div>
     <div class="doc-title">处 方 笺</div>
   </div>
   <div class="fee-row">
@@ -972,10 +1161,13 @@ const generatePrescriptionHtml = (items) => {
 }
 
 // 生成检查申请单打印HTML - 黑白打印格式
-const generateLabHtml = (items) => {
+const generateLabHtml = async (items) => {
   const now = new Date()
   const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
   const total = items.reduce((sum, item) => sum + (item.price || 0), 0)
+  const regId = currentPatient.value?.regId || ''
+  const qrUrl = `http://localhost:5173/patient/payment?regId=${regId}`
+  const qrSrc = await QRCode.toDataURL(qrUrl, { width: 100, margin: 0 })
   
   const itemsHtml = items.map((item, idx) => `
     <tr>
@@ -992,7 +1184,7 @@ const generateLabHtml = (items) => {
   @page { margin: 15mm; size: A5; }
   @media print { * { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
   body { font-family: 'SimSun', '宋体', serif; font-size: 11pt; color: #000; }
-  .paper { max-width: 148mm; margin: 0 auto; border: 1px solid #000; padding: 15px; }
+  .paper { max-width: 148mm; margin: 0 auto; border: 1px solid #000; padding: 15px; position: relative; }
   .header { text-align: center; margin-bottom: 15px; }
   .header h1 { font-size: 16pt; margin: 0 0 8px 0; font-weight: bold; }
   .header h2 { font-size: 14pt; margin: 0; }
@@ -1002,10 +1194,17 @@ const generateLabHtml = (items) => {
   .items-table th, .items-table td { padding: 6px; border: 1px solid #000; text-align: center; }
   .items-table th { background: #eee; }
   .signature { margin-top: 15px; }
+  .qr-code { position: absolute; top: 10px; right: 10px; text-align: center; z-index: 10; }
+  .qr-code img { width: 60px; height: 60px; }
+  .qr-code div { font-size: 9px; margin-top: 2px; background: #fff; }
 </style></head><body>
 <div class="paper">
+  <div class="qr-code">
+    <img src="${qrSrc}" />
+    <div>扫码缴费</div>
+  </div>
   <div class="header">
-    <h1>清远友谊医院</h1>
+    <h1>武汉大学医院</h1>
     <h2>检查/检验申请单</h2>
   </div>
   <table class="info-table">
@@ -1092,7 +1291,7 @@ const completeVisit = async () => {
   }
 
   .right-panel {
-    width: 200px;
+    width: 320px;
     flex-shrink: 0;
   }
 
@@ -1434,6 +1633,33 @@ const completeVisit = async () => {
           padding-left: 16px;
           color: #666;
           font-size: 13px;
+
+          .history-lab-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 4px 0;
+            border-bottom: 1px dashed #eee;
+            
+            &:last-child {
+              border-bottom: none;
+            }
+
+            .lab-name {
+              font-weight: 500;
+            }
+
+            .lab-actions {
+              display: flex;
+              align-items: center;
+              gap: 8px;
+            }
+
+            .no-result {
+              color: #999;
+              font-size: 12px;
+            }
+          }
         }
       }
     }
@@ -1471,6 +1697,27 @@ const completeVisit = async () => {
       
       .tpl-name {
         font-size: 13px;
+      }
+    }
+  }
+
+  .right-tools-panel {
+    height: 100%;
+    padding: 8px;
+    
+    .right-tabs {
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      
+      :deep(.ant-tabs-content) {
+        flex: 1;
+        height: 100%;
+      }
+      
+      :deep(.ant-tabs-tabpane) {
+        height: 100%;
+        overflow: hidden;
       }
     }
   }

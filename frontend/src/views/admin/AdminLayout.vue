@@ -11,6 +11,7 @@
         <a-menu-item key="departments"><template #icon><BankOutlined /></template><span>科室管理</span></a-menu-item>
         <a-menu-item key="rooms"><template #icon><HomeOutlined /></template><span>诊室管理</span></a-menu-item>
         <a-menu-item key="schedules"><template #icon><CalendarOutlined /></template><span>排班管理</span></a-menu-item>
+        <a-menu-item key="kb"><template #icon><ReadOutlined /></template><span>知识库管理</span></a-menu-item>
         <a-menu-item key="query"><template #icon><SearchOutlined /></template><span>数据查询</span></a-menu-item>
       </a-menu>
       <div class="logout" @click="logout"><LogoutOutlined /> 退出登录</div>
@@ -22,7 +23,7 @@
 <script setup>
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { DashboardOutlined, UserOutlined, BankOutlined, CalendarOutlined, SearchOutlined, LogoutOutlined, SettingOutlined, HomeOutlined } from '@ant-design/icons-vue'
+import { DashboardOutlined, UserOutlined, BankOutlined, CalendarOutlined, SearchOutlined, LogoutOutlined, SettingOutlined, HomeOutlined, ReadOutlined } from '@ant-design/icons-vue'
 import { useUserStore } from '@/stores/user'
 
 const route = useRoute()
@@ -30,7 +31,7 @@ const router = useRouter()
 const userStore = useUserStore()
 const isLoggedIn = computed(() => userStore.isLoggedIn && route.name !== 'AdminLogin')
 const activeMenu = computed(() => {
-  const map = { 'Dashboard': 'dashboard', 'Users': 'users', 'Departments': 'departments', 'Rooms': 'rooms', 'Schedules': 'schedules', 'DataQuery': 'query' }
+  const map = { 'Dashboard': 'dashboard', 'Users': 'users', 'Departments': 'departments', 'Rooms': 'rooms', 'Schedules': 'schedules', 'DataQuery': 'query', 'KnowledgeBase': 'kb' }
   return map[route.name] || 'dashboard'
 })
 const handleMenuSelect = ({ key }) => router.push(`/admin/${key}`)

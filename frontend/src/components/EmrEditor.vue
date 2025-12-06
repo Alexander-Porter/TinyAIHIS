@@ -179,9 +179,6 @@
                 <span class="item-index">{{ idx + 1 }}.</span>
                 <span class="item-name">{{ lab.itemName }}</span>
                 <span class="item-price">¥{{ lab.price || 0 }}</span>
-                <span class="item-status" :class="getLabStatusClass(lab.status)">
-                  {{ getLabStatusText(lab.status) }}
-                </span>
               </div>
             </div>
           </div>
@@ -203,11 +200,13 @@
         <!-- Signature Section -->
         <div class="signature-section">
           <span class="sig-item">医师签名：</span>
-          <editable-field 
-            v-model="formData.doctorName" 
-            :readonly="readonly"
-            placeholder="医师姓名"
-          />
+          <div style="display: inline-block" @dblclick.capture.stop="autoSign">
+            <editable-field 
+              v-model="formData.doctorName" 
+              :readonly="readonly"
+              placeholder="医师姓名(双击自动签名)"
+            />
+          </div>
           <span class="sig-item" style="margin-left: 50px">日期：</span>
           <editable-field 
             v-model="formData.signDate" 
@@ -223,13 +222,16 @@
 <script setup>
 import { ref, reactive, watch, onMounted, computed } from 'vue'
 import { PrinterOutlined } from '@ant-design/icons-vue'
+import { useUserStore } from '@/stores/user'
 import EditableField from './EditableField.vue'
 import EditableArea from './EditableArea.vue'
+
+const userStore = useUserStore()
 
 const props = defineProps({
   modelValue: { type: Object, default: () => ({}) },
   readonly: { type: Boolean, default: false },
-  hospitalName: { type: String, default: '清远友谊医院' },
+  hospitalName: { type: String, default: '武汉大学医院' },
   patientInfo: { type: Object, default: () => ({}) },
   labOrders: { type: Array, default: () => [] },
   prescriptions: { type: Array, default: () => [] },
@@ -314,6 +316,14 @@ onMounted(() => {
 
 const print = () => {
   emit('print', { ...formData })
+}
+
+const autoSign = () => {
+  if (props.readonly) return
+  if (userStore.userInfo && userStore.userInfo.realName) {
+    formData.doctorName = userStore.userInfo.realName
+    formData.signDate = new Date().toLocaleDateString('zh-CN')
+  }
 }
 
 const getData = () => ({ ...formData })

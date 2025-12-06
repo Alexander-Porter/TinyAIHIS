@@ -128,6 +128,12 @@ export const labApi = {
   getByPatient: (patientId) => api.get(`/lab/patient/${patientId}`),
 }
 
+// Check Item APIs
+export const checkItemApi = {
+  getAll: () => api.get('/check-item/list'),
+  search: (keyword) => api.get('/check-item/search', { params: { keyword } }),
+}
+
 // Pharmacy APIs
 export const pharmacyApi = {
   getDrugs: () => api.get('/pharmacy/drugs'),
@@ -199,4 +205,13 @@ export const adminApi = {
       window.URL.revokeObjectURL(url)
     })
   },
+}
+
+// Knowledge Base (admin)
+export const kbApi = {
+  list: () => api.get('/admin/kb/list'),
+  get: (id) => api.get(`/admin/kb/${id}`),
+  add: (data) => api.post('/admin/kb', data),
+  update: (id, data) => api.put(`/admin/kb/${id}`, data),
+  remove: (id) => api.delete(`/admin/kb/${id}`)
 }

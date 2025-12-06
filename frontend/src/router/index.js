@@ -33,7 +33,7 @@ const routes = [
     component: () => import('@/views/doctor/DoctorLayout.vue'),
     children: [
       { path: '', redirect: '/doctor/workstation' },
-      { path: 'login', name: 'DoctorLogin', component: () => import('@/views/doctor/Login.vue') },
+      { path: 'login', name: 'DoctorLogin', component: () => import('@/views/StaffLogin.vue') },
       { path: 'workstation', name: 'Workstation', component: () => import('@/views/doctor/Workstation.vue') },
       { path: 'templates', name: 'Templates', component: () => import('@/views/doctor/Templates.vue') },
     ]
@@ -45,7 +45,7 @@ const routes = [
     component: () => import('@/views/lab/LabLayout.vue'),
     children: [
       { path: '', redirect: '/lab/workstation' },
-      { path: 'login', name: 'LabLogin', component: () => import('@/views/lab/Login.vue') },
+      { path: 'login', name: 'LabLogin', component: () => import('@/views/StaffLogin.vue') },
       { path: 'workstation', name: 'LabWorkstation', component: () => import('@/views/lab/Workstation.vue') },
     ]
   },
@@ -56,7 +56,7 @@ const routes = [
     component: () => import('@/views/pharmacy/PharmacyLayout.vue'),
     children: [
       { path: '', redirect: '/pharmacy/dispense' },
-      { path: 'login', name: 'PharmacyLogin', component: () => import('@/views/pharmacy/Login.vue') },
+      { path: 'login', name: 'PharmacyLogin', component: () => import('@/views/StaffLogin.vue') },
       { path: 'dispense', name: 'Dispense', component: () => import('@/views/pharmacy/Dispense.vue') },
       { path: 'inventory', name: 'Inventory', component: () => import('@/views/pharmacy/Inventory.vue') },
     ]
@@ -68,12 +68,13 @@ const routes = [
     component: () => import('@/views/admin/AdminLayout.vue'),
     children: [
       { path: '', redirect: '/admin/dashboard' },
-      { path: 'login', name: 'AdminLogin', component: () => import('@/views/admin/Login.vue') },
+      { path: 'login', name: 'AdminLogin', component: () => import('@/views/StaffLogin.vue') },
       { path: 'dashboard', name: 'Dashboard', component: () => import('@/views/admin/Dashboard.vue') },
       { path: 'users', name: 'Users', component: () => import('@/views/admin/Users.vue') },
       { path: 'departments', name: 'Departments', component: () => import('@/views/admin/Departments.vue') },
       { path: 'rooms', name: 'Rooms', component: () => import('@/views/admin/Rooms.vue') },
       { path: 'schedules', name: 'Schedules', component: () => import('@/views/admin/Schedules.vue') },
+      { path: 'kb', name: 'KnowledgeBase', component: () => import('@/views/admin/KnowledgeBase.vue') },
       { path: 'query', name: 'DataQuery', component: () => import('@/views/admin/DataQuery.vue') },
     ]
   },

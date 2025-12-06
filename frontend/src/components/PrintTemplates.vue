@@ -225,7 +225,7 @@ import { computed, ref } from 'vue'
 
 const props = defineProps({
   type: { type: String, default: 'prescription' }, // prescription, lab, emr
-  hospitalName: { type: String, default: '清远友谊医院' },
+  hospitalName: { type: String, default: '武汉大学医院' },
   deptName: { type: String, default: '' },
   patientName: { type: String, default: '' },
   gender: { type: Number, default: 1 },
