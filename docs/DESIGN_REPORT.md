@@ -391,7 +391,7 @@ public boolean incrementCount(Long scheduleId) {
                     ▼
         ┌─────────────────────────┐
         │  SiliconFlow API调用     │
-        │  Qwen/Qwen2.5-7B-Instruct│
+        │  deepseek-ai/DeepSeek-V3.2│
         └───────────┬─────────────┘
                     │
                     ▼

@@ -341,33 +341,35 @@ public class MedicalKnowledgeBase {
     }
 
     private String inferDepartment(String diseaseName, String content) {
-        String combined = diseaseName + " " + content;
+        // Count occurrences of explicit department names in disease name + content
+        String text = (diseaseName == null ? "" : diseaseName) + " " + (content == null ? "" : content);
 
-        if (combined.contains("支气管") || combined.contains("肺") || combined.contains("呼吸")) {
-            return "呼吸内科";
-        } else if (combined.contains("胃") || combined.contains("肠") || combined.contains("消化")) {
-            return "消化内科";
-        } else if (combined.contains("心") || combined.contains("血压") || combined.contains("心脏")) {
-            return "心内科";
-        } else if (combined.contains("骨") || combined.contains("关节") || combined.contains("脊")) {
-            return "骨科";
-        } else if (combined.contains("皮肤") || combined.contains("疹") || combined.contains("痤疮")) {
-            return "皮肤科";
-        } else if (combined.contains("眼") || combined.contains("视力")) {
-            return "眼科";
-        } else if (combined.contains("儿童") || combined.contains("小儿") || combined.contains("新生儿")) {
-            return "儿科";
-        } else if (combined.contains("妇") || combined.contains("产") || combined.contains("月经")) {
-            return "妇产科";
-        } else if (combined.contains("神经") || combined.contains("头痛") || combined.contains("眩晕")) {
-            return "神经内科";
-        } else if (combined.contains("肾") || combined.contains("泌尿")) {
-            return "泌尿外科";
-        } else if (combined.contains("外伤") || combined.contains("手术")) {
-            return "外科";
+        String[] departments = new String[]{
+            "呼吸内科", "消化内科", "心内科", "神经内科", "内分泌科",
+            "血液科", "风湿免疫科", "肿瘤科", "感染科", "传染科",
+            "肾内科", "内科", "外科", "骨科", "泌尿外科",
+            "普外科", "神经外科", "胸外科", "心外科", "烧伤科",
+            "急诊科", "重症医学科", "妇产科", "产科", "妇科",
+            "儿科", "新生儿科", "皮肤科", "眼科", "耳鼻喉科",
+            "口腔科", "口腔颌面外科"
+        };
+
+        String bestDept = "内科";
+        int bestCount = 0;
+
+        for (String dept : departments) {
+            int count = 0;
+            int idx = -1;
+            while ((idx = text.indexOf(dept, idx + 1)) >= 0) {
+                count++;
+            }
+            if (count > bestCount) {
+                bestCount = count;
+                bestDept = dept;
+            }
         }
 
-        return "内科";
+        return bestDept;
     }
 
     private void openVectorIndex() throws IOException {

@@ -8,11 +8,7 @@ import com.tinyhis.entity.*;
 import com.tinyhis.mapper.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.ai.chat.messages.AssistantMessage;
-import org.springframework.ai.chat.messages.Message;
-import org.springframework.ai.chat.messages.SystemMessage;
-import org.springframework.ai.chat.messages.UserMessage;
-import org.springframework.ai.chat.prompt.Prompt;
+
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
@@ -62,7 +58,7 @@ public class RagTriageService {
     @Value("${siliconflow.api-key:}")
     private String siliconflowApiKey;
 
-    @Value("${siliconflow.model:gpt-4o-mini}")
+    @Value("${siliconflow.model:deepseek-ai/DeepSeek-V3.2}")
     private String siliconflowModel;
 
     /**
@@ -80,37 +76,11 @@ public class RagTriageService {
                 }
 
                 sendEvent(emitter, "status", "正在分析病情...");
-                
-                String query = buildQuery(symptoms, bodyPart);
-                List<MedicalDocument> relevantDocs = knowledgeBase.search(query, topK);
-                
-                if (!relevantDocs.isEmpty()) {
-                    // Send structured tool call information
-                    Map<String, Object> toolCall = new HashMap<>();
-                    toolCall.put("name", "search_knowledge_base");
-                    toolCall.put("query", query);
-                    List<Map<String, String>> sources = relevantDocs.stream()
-                        .map(doc -> {
-                            Map<String, String> source = new HashMap<>();
-                            source.put("disease", doc.getDiseaseName());
-                            source.put("department", doc.getDepartment());
-                            return source;
-                        })
-                        .toList();
-                    toolCall.put("sources", sources);
-                    sendEvent(emitter, "tool_call", objectMapper.writeValueAsString(toolCall));
-                    
-                    // Also send simple text for display
-                    String docNames = relevantDocs.stream()
-                        .map(doc -> String.format("%s (%s)", doc.getDiseaseName(), doc.getDepartment()))
-                        .collect(Collectors.joining(", "));
-                    sendEvent(emitter, "tool", "检索知识库: " + docNames);
-                }
-                
-                String context = buildContext(relevantDocs);
-                String prompt = buildPrompt(context, symptoms, bodyPart);
-                
-                callLLMStream(new Prompt(prompt), emitter, null);
+                List<Map<String, Object>> messages = new ArrayList<>();
+                messages.add(systemMessage(buildTriageSystemPrompt()));
+                messages.add(userMessage(buildUserDescription(symptoms, bodyPart)));
+
+                chatWithTools(messages, emitter, null, null, 0, new StringBuilder());
                 
             } catch (Exception e) {
                 log.error("Streaming triage failed", e);
@@ -132,150 +102,23 @@ public class RagTriageService {
                 
                 // Send chatId back to frontend
                 sendEvent(emitter, "session", chatId);
+                sendEvent(emitter, "status", "正在准备患者信息...");
 
-                // 1. Build Patient Context
                 String patientContext = buildPatientContext(patientId);
-                
-                // 2. Search Knowledge Base
-                List<MedicalDocument> relevantDocs = knowledgeBase.search(userQuery, topK);
-                
-                // Send tool call information if knowledge found
-                if (!relevantDocs.isEmpty()) {
-                    Map<String, Object> toolCall = new HashMap<>();
-                    toolCall.put("name", "search_knowledge_base");
-                    toolCall.put("query", userQuery);
-                    List<Map<String, String>> sources = relevantDocs.stream()
-                        .map(doc -> {
-                            Map<String, String> source = new HashMap<>();
-                            source.put("disease", doc.getDiseaseName());
-                            source.put("department", doc.getDepartment());
-                            return source;
-                        })
-                        .toList();
-                    toolCall.put("sources", sources);
-                    sendEvent(emitter, "tool_call", objectMapper.writeValueAsString(toolCall));
-                    
-                    String docNames = relevantDocs.stream()
-                        .map(doc -> String.format("%s (%s)", doc.getDiseaseName(), doc.getDepartment()))
-                        .collect(Collectors.joining(", "));
-                    sendEvent(emitter, "tool", "检索知识库: " + docNames);
-                }
-                
-                String knowledgeContext = buildContext(relevantDocs);
-                
-                // 3. Build System Prompt
-                String systemPrompt = buildDoctorSystemPrompt(patientContext, knowledgeContext);
-                
-                // 4. Load History
-                List<Message> history = loadChatHistory(chatId);
-                
-                // 5. Construct Prompt
-                List<Message> messages = new ArrayList<>();
-                messages.add(new SystemMessage(systemPrompt));
+                List<Map<String, Object>> history = loadChatHistory(chatId);
+
+                List<Map<String, Object>> messages = new ArrayList<>();
+                messages.add(systemMessage(buildDoctorSystemPrompt(patientContext)));
                 messages.addAll(history);
-                messages.add(new UserMessage(userQuery));
-                
-                Prompt prompt = new Prompt(messages);
-                
-                // 6. Stream
-                callLLMStreamWithHistory(prompt, emitter, chatId, userQuery);
+                messages.add(userMessage(userQuery));
+
+                chatWithTools(messages, emitter, chatId, userQuery, 0, new StringBuilder());
                 
             } catch (Exception e) {
                 log.error("Doctor assist failed", e);
                 emitter.completeWithError(e);
             }
         });
-    }
-
-    /**
-     * Stream SiliconFlow OpenAI-compatible SSE (includes reasoning_content if provided)
-     */
-    private void streamSiliconflow(Prompt prompt, SseEmitter emitter, String chatId, String userQuery, Runnable onComplete) {
-        if (siliconflowApiKey == null || siliconflowApiKey.isEmpty()) {
-            emitter.completeWithError(new IllegalStateException("SILICONFLOW_API_KEY is missing"));
-            return;
-        }
-
-        try {
-            Map<String, Object> body = new HashMap<>();
-            body.put("model", siliconflowModel);
-            body.put("stream", true);
-            body.put("messages", toOpenAiMessages(prompt));
-            // Ask backend to include reasoning (provider-dependent; siliconflow supports OpenAI compatible fields)
-            body.put("reasoning", true);
-
-            String json = objectMapper.writeValueAsString(body);
-
-            HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create("https://api.siliconflow.cn/v1/chat/completions"))
-                    .timeout(Duration.ofSeconds(60))
-                    .header("Content-Type", "application/json")
-                    .header("Authorization", "Bearer " + siliconflowApiKey)
-                    .POST(HttpRequest.BodyPublishers.ofString(json))
-                    .build();
-
-            HttpResponse<java.io.InputStream> response = httpClient.send(request, HttpResponse.BodyHandlers.ofInputStream());
-            if (response.statusCode() / 100 != 2 || response.body() == null) {
-                emitter.completeWithError(new IllegalStateException("SiliconFlow HTTP " + response.statusCode()));
-                return;
-            }
-
-            BufferedReader reader = new BufferedReader(new InputStreamReader(response.body(), StandardCharsets.UTF_8));
-            String line;
-            StringBuilder fullResponse = new StringBuilder();
-
-            while ((line = reader.readLine()) != null) {
-                if (line.isEmpty()) continue;
-                if (!line.startsWith("data:")) continue;
-
-                String data = line.substring(5).trim();
-                if ("[DONE]".equals(data)) break;
-
-                try {
-                    com.fasterxml.jackson.databind.JsonNode node = objectMapper.readTree(data);
-                    com.fasterxml.jackson.databind.JsonNode choices = node.path("choices");
-                    if (!choices.isArray() || choices.isEmpty()) continue;
-                    com.fasterxml.jackson.databind.JsonNode delta = choices.get(0).path("delta");
-
-                    String reasoning = delta.path("reasoning_content").asText("");
-                    if (!reasoning.isEmpty()) {
-                        sendEvent(emitter, "thought", reasoning);
-                    }
-
-                    String content = delta.path("content").asText("");
-                    if (!content.isEmpty()) {
-                        fullResponse.append(content);
-                        sendEvent(emitter, "message", content);
-                    }
-                } catch (Exception parseEx) {
-                    log.error("Failed to parse SiliconFlow chunk", parseEx);
-                }
-            }
-
-            if (chatId != null && userQuery != null) {
-                saveChatHistory(chatId, userQuery, fullResponse.toString());
-            }
-            if (onComplete != null) onComplete.run();
-            emitter.complete();
-
-        } catch (Exception e) {
-            log.error("SiliconFlow streaming failed", e);
-            emitter.completeWithError(e);
-        }
-    }
-
-    private List<Map<String, Object>> toOpenAiMessages(Prompt prompt) {
-        List<Map<String, Object>> list = new ArrayList<>();
-        for (Message m : prompt.getInstructions()) {
-            if (m instanceof SystemMessage sm) {
-                list.add(Map.of("role", "system", "content", sm.getText()));
-            } else if (m instanceof UserMessage um) {
-                list.add(Map.of("role", "user", "content", um.getText()));
-            } else if (m instanceof AssistantMessage am) {
-                list.add(Map.of("role", "assistant", "content", am.getText()));
-            }
-        }
-        return list;
     }
 
     private String buildQuery(String symptoms, String bodyPart) {
@@ -289,17 +132,7 @@ public class RagTriageService {
         return query.toString().trim();
     }
 
-    private String buildContext(List<MedicalDocument> docs) {
-        if (docs.isEmpty()) {
-            return "暂无相关医学知识参考。";
-        }
-        return docs.stream()
-                .map(doc -> String.format("【%s】\n科室: %s\n%s", 
-                        doc.getDiseaseName(), 
-                        doc.getDepartment(),
-                        truncateContent(doc.getContent(), 500)))
-                .collect(Collectors.joining("\n\n---\n\n"));
-    }
+
 
     private String truncateContent(String content, int maxLength) {
         if (content == null) return "";
@@ -307,40 +140,369 @@ public class RagTriageService {
         return content.substring(0, maxLength) + "...";
     }
 
-    private String buildPrompt(String context, String symptoms, String bodyPart) {
+
+    private String buildDoctorSystemPrompt(String patientContext) {
         return """
-            你是一位专业的医院导诊助手。请根据以下医学知识参考和患者描述，推荐最合适的就诊科室。
-            
-            【医学知识参考】
+            你是一名经验丰富的医生助手。请根据以下患者信息、病历记录和医学参考资料，为医生提供诊断建议和治疗方案。
+
+            你可以调用函数 search_knowledge_base 来检索相关疾病和科室信息，必要时请先调用该工具再回答。
+            回答需要简洁、专业，并在信息不足时指出需要补充的检查或信息。
+
+            【患者信息】
             %s
-            
-            【患者描述】
-            - 症状: %s
-            - 部位: %s
-            
-            请先进行思考分析，然后给出推荐科室。格式如下：
-            思考过程：[你的分析过程]
-            科室：[科室名称]
-            理由：[简短理由]
-            可能疾病：[可能的疾病名称]
+            """.formatted(patientContext);
+    }
+
+    private String buildTriageSystemPrompt() {
+        return """
+            你是一名医院导诊助手，目标是根据患者症状推荐合适的就诊科室。
+            如果需要医学知识，请调用 search_knowledge_base 函数获取相关疾病和科室信息，然后基于检索结果给出推荐。
+            输出包含：
+            - 思考过程：简要分析
+            - 科室：推荐科室
+            - 理由：简短理由
+            - 可能疾病：列出可能疾病
+            """;
+    }
+
+    private String buildUserDescription(String symptoms, String bodyPart) {
+        return """
+            症状：%s
+            部位：%s
+            请根据需要调用 search_knowledge_base 获取知识库信息。
             """.formatted(
-                context,
                 symptoms != null ? symptoms : "未提供",
                 bodyPart != null ? bodyPart : "未提供");
     }
-    
-    private String buildDoctorSystemPrompt(String patientContext, String knowledgeContext) {
-        return """
-            你是一名经验丰富的医生助手。请根据以下患者信息、病历记录和医学参考资料，为医生提供诊断建议和治疗方案。
-            
-            【患者信息】
-            %s
-            
-            【医学参考资料】
-            %s
-            
-            请保持专业、客观。如果信息不足，请提示医生补充。
-            """.formatted(patientContext, knowledgeContext);
+
+    private Map<String, Object> systemMessage(String content) {
+        return Map.of("role", "system", "content", content);
+    }
+
+    private Map<String, Object> userMessage(String content) {
+        return Map.of("role", "user", "content", content);
+    }
+
+    private List<Map<String, Object>> buildTools() {
+        Map<String, Object> searchFunction = Map.of(
+            "name", "search_knowledge_base",
+            "description", "检索医学知识库，返回相关疾病与科室信息。",
+            "parameters", Map.of(
+                "type", "object",
+                "properties", Map.of(
+                    "query", Map.of(
+                        "type", "string",
+                        "description", "症状或问题描述，用于检索知识库"
+                    ),
+                    "top_k", Map.of(
+                        "type", "integer",
+                        "description", "返回的结果数量",
+                        "default", topK
+                    )
+                ),
+                "required", List.of("query")
+            )
+        );
+
+        return List.of(Map.of(
+            "type", "function",
+            "function", searchFunction
+        ));
+    }
+
+    private void chatWithTools(List<Map<String, Object>> messages, SseEmitter emitter, String chatId, String userQuery, int depth, StringBuilder finalResponse) {
+
+
+        if (siliconflowApiKey == null || siliconflowApiKey.isEmpty()) {
+            emitter.completeWithError(new IllegalStateException("SILICONFLOW_API_KEY is missing"));
+            return;
+        }
+
+        try {
+            Map<String, Object> body = new HashMap<>();
+            body.put("model", siliconflowModel);
+            body.put("stream", true);
+            body.put("messages", messages);
+            body.put("reasoning", true);
+            body.put("tools", buildTools());
+            System.out.println("SiliconFlow Chat Request: " + objectMapper.writeValueAsString(body));
+            String json = objectMapper.writeValueAsString(body);
+
+            HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create("https://api.siliconflow.cn/v1/chat/completions"))
+                .timeout(Duration.ofSeconds(60))
+                .header("Content-Type", "application/json")
+                .header("Authorization", "Bearer " + siliconflowApiKey)
+                .POST(HttpRequest.BodyPublishers.ofString(json))
+                .build();
+
+            HttpResponse<java.io.InputStream> response = httpClient.send(request, HttpResponse.BodyHandlers.ofInputStream());
+            if (response.statusCode() / 100 != 2 || response.body() == null) {
+                emitter.completeWithError(new IllegalStateException("SiliconFlow HTTP " + response.statusCode()));
+                return;
+            }
+
+            BufferedReader reader = new BufferedReader(new InputStreamReader(response.body(), StandardCharsets.UTF_8));
+            String line;
+            Map<String, ToolCallState> toolCalls = new LinkedHashMap<>();
+            StringBuilder stageContent = new StringBuilder();
+            String finishReason = null;
+
+            while ((line = reader.readLine()) != null) {
+                if (line.isEmpty() || !line.startsWith("data:")) continue;
+
+                String data = line.substring(5).trim();
+                if ("[DONE]".equals(data)) break;
+
+                try {
+                    com.fasterxml.jackson.databind.JsonNode node = objectMapper.readTree(data);
+                    com.fasterxml.jackson.databind.JsonNode choices = node.path("choices");
+                    if (!choices.isArray() || choices.isEmpty()) continue;
+                    com.fasterxml.jackson.databind.JsonNode choice = choices.get(0);
+                    com.fasterxml.jackson.databind.JsonNode delta = choice.path("delta");
+                    log.info(choices.toString());
+                    String reasoning = delta.path("reasoning_content").asText("");
+                    if (!reasoning.isEmpty()) {
+                        sendEvent(emitter, "thought", reasoning);
+                    }
+
+                    String content = delta.path("content").asText("");
+                    if (!content.isEmpty()) {
+                        stageContent.append(content);
+                        sendEvent(emitter, "message", content);
+                    }
+
+                        com.fasterxml.jackson.databind.JsonNode toolCallNodes = delta.path("tool_calls");
+                        if (toolCallNodes.isArray()) {
+                            log.info("Tool call delta: {}", toolCallNodes.toString());
+                            for (com.fasterxml.jackson.databind.JsonNode call : toolCallNodes) {
+                                int index = call.path("index").asInt(-1);
+                                String idField = call.path("id").asText("");
+
+                                // Use index as primary accumulator key; id is captured but not used for grouping
+                                String key;
+                                if (index >= 0) {
+                                    key = "idx-" + index;
+                                } else if (!idField.isEmpty()) {
+                                    key = idField;
+                                } else {
+                                    key = UUID.randomUUID().toString();
+                                }
+
+                                ToolCallState state = toolCalls.computeIfAbsent(key, k -> new ToolCallState(key, index));
+                                if (state.modelId == null && !idField.isEmpty()) {
+                                    state.modelId = idField;
+                                }
+
+                                String name = call.path("function").path("name").asText(null);
+                                if (name != null && (state.name == null || state.name.isEmpty())) {
+                                    state.name = name;
+                                }
+                                String arguments = call.path("function").path("arguments").asText("");
+                                if (!arguments.isEmpty()) {
+                                    state.arguments.append(arguments);
+                                }
+                                log.info("Accumulated tool_call key={}, modelId={}, name={}, idx={}, args_so_far='{}'", key, state.modelId, state.name, state.index, state.arguments);
+                            }
+                        }
+
+                    String fr = choice.path("finish_reason").asText(null);
+                    if (fr != null && !fr.isEmpty()) {
+                        finishReason = fr;
+                    }
+                } catch (Exception parseEx) {
+                    log.error("Failed to parse SiliconFlow chunk", parseEx);
+                }
+            }
+
+            if (finishReason == null && !toolCalls.isEmpty()) {
+                finishReason = "tool_calls";
+            }
+
+            if ("tool_calls".equals(finishReason) && !toolCalls.isEmpty()) {
+                List<Map<String, Object>> nextMessages = new ArrayList<>(messages);
+                log.info("Tool calls to execute ({}): {}", toolCalls.size(), toolCalls);
+                nextMessages.add(assistantToolCallMessage(stageContent.toString(), toolCalls.values()));
+
+                for (ToolCallState state : toolCalls.values()) {
+                    log.info("Executing tool: {} with args: {} (key={}, idx={}, modelId={})", state.name, state.arguments, state.id, state.index, state.modelId);
+                    Map<String, Object> toolMessage = executeSearchTool(state, emitter);
+                    if (toolMessage != null) {
+                        nextMessages.add(toolMessage);
+                    }
+                }
+
+                chatWithTools(nextMessages, emitter, chatId, userQuery, depth + 1, finalResponse);
+                return;
+            }
+
+            finalResponse.append(stageContent);
+            if (chatId != null && userQuery != null && finalResponse.length() > 0) {
+                saveChatHistory(chatId, userQuery, finalResponse.toString());
+            }
+            emitter.complete();
+
+        } catch (Exception e) {
+            log.error("SiliconFlow streaming failed", e);
+            emitter.completeWithError(e);
+        }
+    }
+
+    private Map<String, Object> assistantToolCallMessage(String content, Collection<ToolCallState> toolCalls) {
+        List<Map<String, Object>> calls = toolCalls.stream()
+            .map(state -> Map.of(
+                "id", state.effectiveId(),
+                "type", "function",
+                "function", Map.of(
+                    "name", state.name != null ? state.name : "search_knowledge_base",
+                    "arguments", state.arguments.toString()
+                )
+            ))
+            .toList();
+
+        Map<String, Object> message = new HashMap<>();
+        message.put("role", "assistant");
+        message.put("tool_calls", calls);
+        if (!content.isEmpty()) {
+            message.put("content", content);
+        }
+        return message;
+    }
+
+    private Map<String, Object> executeSearchTool(ToolCallState state, SseEmitter emitter) {
+        String argsJson = state.arguments.toString();
+        Map<String, Object> args = parseArgs(argsJson);
+        String query = args.getOrDefault("query", "").toString();
+        int limit = parseTopK(args.get("top_k"));
+        if (limit <= 0) limit = topK;
+
+        List<MedicalDocument> docs = query.isEmpty() ? List.of() : knowledgeBase.search(query, limit);
+        if (!docs.isEmpty()) {
+            Map<String, Object> toolCall = new HashMap<>();
+            toolCall.put("name", state.name != null ? state.name : "search_knowledge_base");
+            toolCall.put("query", query);
+            List<Map<String, String>> sources = docs.stream()
+                .map(doc -> {
+                    Map<String, String> source = new HashMap<>();
+                    source.put("disease", doc.getDiseaseName());
+                    source.put("department", doc.getDepartment());
+                    return source;
+                })
+                .toList();
+            toolCall.put("sources", sources);
+            sendEvent(emitter, "tool_call", safeJson(toolCall));
+
+
+
+        } 
+
+        Map<String, Object> toolMessage = new HashMap<>();
+        toolMessage.put("role", "tool");
+        toolMessage.put("tool_call_id", state.effectiveId());
+        toolMessage.put("name", state.name != null ? state.name : "search_knowledge_base");
+        toolMessage.put("content", buildToolResultContent(query, docs));
+        return toolMessage;
+    }
+
+    private Map<String, Object> parseArgs(String argsJson) {
+        if (argsJson == null) return new HashMap<>();
+
+        String raw = argsJson.trim();
+        if (raw.isEmpty()) return new HashMap<>();
+
+        // Handle simple numeric payloads like "3" meaning only top_k was provided
+        if (raw.matches("^-?\\d+$")) {
+            return Map.of("top_k", Integer.parseInt(raw));
+        }
+
+        // Ensure arguments are a JSON object; if the model streamed partial braces, try to coerce
+        if (!raw.startsWith("{") && !raw.startsWith("[")) {
+            // Sometimes OpenAI-style tools send a JSON string of object; try quoting and parsing
+            raw = "{" + raw + "}";
+        }
+
+        try {
+            return objectMapper.readValue(raw, new TypeReference<Map<String, Object>>() {});
+        } catch (Exception e) {
+            log.warn("Failed to parse tool arguments: {}", raw, e);
+
+            // Fallback: treat the raw (or inner) string as a direct query
+            String inner = raw;
+            if (raw.length() >= 2 && raw.startsWith("{") && raw.endsWith("}")) {
+                inner = raw.substring(1, raw.length() - 1).trim();
+            }
+            inner = trimWrappingQuotes(inner);
+            if (inner.isEmpty()) return new HashMap<>();
+
+            return Map.of("query", inner);
+        }
+    }
+
+    private String trimWrappingQuotes(String val) {
+        if (val == null) return "";
+        String out = val.trim();
+        if (out.length() >= 2) {
+            boolean doubleQuoteWrapped = out.startsWith("\"") && out.endsWith("\"");
+            boolean singleQuoteWrapped = out.startsWith("'") && out.endsWith("'");
+            if (doubleQuoteWrapped || singleQuoteWrapped) {
+                out = out.substring(1, out.length() - 1).trim();
+            }
+        }
+        return out;
+    }
+
+    private int parseTopK(Object val) {
+        if (val == null) return -1;
+        if (val instanceof Number n) {
+            return n.intValue();
+        }
+        try {
+            return Integer.parseInt(val.toString());
+        } catch (NumberFormatException e) {
+            return -1;
+        }
+    }
+
+    private String buildToolResultContent(String query, List<MedicalDocument> docs) {
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("query", query);
+        payload.put("results", docs.stream()
+            .map(doc -> Map.of(
+                "disease", doc.getDiseaseName(),
+                "department", doc.getDepartment(),
+                "summary", truncateContent(doc.getContent(), 300)
+            ))
+            .toList());
+        return safeJson(payload);
+    }
+
+    private String safeJson(Object payload) {
+        try {
+            return objectMapper.writeValueAsString(payload);
+        } catch (Exception e) {
+            log.error("Failed to serialize payload", e);
+            return "{}";
+        }
+    }
+
+    private static class ToolCallState {
+        private final String id;
+        private final int index;
+        private String modelId; // id provided by the model (first chunk)
+        private String name;
+        private final StringBuilder arguments = new StringBuilder();
+
+        ToolCallState(String id, int index) {
+            this.id = id;
+            this.index = index;
+        }
+
+        String effectiveId() {
+            if (modelId != null && !modelId.isEmpty()) {
+                return modelId;
+            }
+            return id;
+        }
     }
 
     private String buildPatientContext(Long patientId) {
@@ -454,13 +616,10 @@ public class RagTriageService {
         return sb.toString();
     }
 
-    private void callLLMStream(Prompt prompt, SseEmitter emitter, Runnable onComplete) {
-        streamSiliconflow(prompt, emitter, null, null, onComplete);
-    }
-    
-    private void callLLMStreamWithHistory(Prompt prompt, SseEmitter emitter, String chatId, String userQuery) {
-        streamSiliconflow(prompt, emitter, chatId, userQuery, null);
-    }
+
+
+
+
 
     private void sendEvent(SseEmitter emitter, String name, String data) {
         try {
@@ -519,20 +678,18 @@ public class RagTriageService {
         return rec;
     }
     
-    private List<Message> loadChatHistory(String conversationId) {
+    private List<Map<String, Object>> loadChatHistory(String conversationId) {
         List<String> historyJson = redisTemplate.opsForList().range("chat:history:" + conversationId, 0, -1);
         if (historyJson == null || historyJson.isEmpty()) return new ArrayList<>();
-        
-        List<Message> messages = new ArrayList<>();
+
+        List<Map<String, Object>> messages = new ArrayList<>();
         for (String json : historyJson) {
             try {
                 Map<String, String> map = objectMapper.readValue(json, new TypeReference<Map<String, String>>() {});
                 String role = map.get("role");
                 String content = map.get("content");
-                if ("user".equals(role)) {
-                    messages.add(new UserMessage(content));
-                } else if ("assistant".equals(role)) {
-                    messages.add(new AssistantMessage(content));
+                if ("user".equals(role) || "assistant".equals(role)) {
+                    messages.add(Map.of("role", role, "content", content));
                 }
             } catch (Exception e) {
                 log.error("Failed to parse chat history", e);

@@ -24,7 +24,7 @@ spring:
       base-url: https://api.siliconflow.cn/v1
       chat:
         options:
-          model: Qwen/Qwen2.5-7B-Instruct
+          model: deepseek-ai/DeepSeek-V3.2
 
 mybatis-plus:
   mapper-locations: classpath:/mapper/**/*.xml
