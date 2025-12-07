@@ -331,12 +331,32 @@
         </div>
       </template>
     </a-modal>
+    
+    <!-- Knowledge Search Popup -->
+    <KnowledgeSearchPopup 
+      v-model="knowledgeSearchVisible"
+      :initialQuery="knowledgeSearchQuery"
+      @insert="handleKnowledgeInsert"
+    />
+    
+    <!-- Context Menu for Text Selection -->
+    <teleport to="body">
+      <div
+        v-if="contextMenuVisible"
+        class="context-menu"
+        :style="{ top: contextMenuY + 'px', left: contextMenuX + 'px' }"
+      >
+        <div class="context-menu-item" @click="searchSelectedText">
+          <SearchOutlined /> 搜索知识库
+        </div>
+      </div>
+    </teleport>
   </div>
 </template>
 
 <script setup>
 import { ref, reactive, onMounted, onBeforeUnmount, computed } from 'vue'
-import { BellOutlined, DeleteOutlined, SaveOutlined, CheckOutlined, PauseOutlined, PlayCircleOutlined, PrinterOutlined, RobotOutlined } from '@ant-design/icons-vue'
+import { BellOutlined, DeleteOutlined, SaveOutlined, CheckOutlined, PauseOutlined, PlayCircleOutlined, PrinterOutlined, RobotOutlined, SearchOutlined } from '@ant-design/icons-vue'
 import { message } from 'ant-design-vue'
 import { doctorApi, emrApi, pharmacyApi, checkItemApi } from '@/utils/api'
 import { useUserStore } from '@/stores/user'
@@ -345,6 +365,7 @@ import { Client } from '@stomp/stompjs'
 import EmrEditor from '@/components/EmrEditor.vue'
 import PrintTemplates from '@/components/PrintTemplates.vue'
 import DoctorAiChat from '@/components/DoctorAiChat.vue'
+import KnowledgeSearchPopup from '@/components/KnowledgeSearchPopup.vue'
 import QRCode from 'qrcode'
 
 const userStore = useUserStore()
@@ -363,6 +384,12 @@ const reportVisible = ref(false)
 const currentReport = ref(null)
 const aiDrawerVisible = ref(false)
 const aiInitialQuery = ref('')
+const knowledgeSearchVisible = ref(false)
+const knowledgeSearchQuery = ref('')
+const contextMenuVisible = ref(false)
+const contextMenuX = ref(0)
+const contextMenuY = ref(0)
+const selectedText = ref('')
 
 const drugs = ref([])
 const templates = ref([])
@@ -458,6 +485,41 @@ const applyAiSuggestion = (content) => {
   message.success('已引用到病历')
 }
 
+// Knowledge search handlers
+const handleKnowledgeInsert = (doc) => {
+  if (emrEditorRef.value) {
+    // Insert knowledge reference into EMR
+    const reference = `\n\n【参考文献】\n疾病：${doc.diseaseName}\n科室：${doc.department}\n`
+    emrEditorRef.value.insertText(reference)
+  }
+}
+
+const searchSelectedText = () => {
+  contextMenuVisible.value = false
+  if (selectedText.value.trim()) {
+    knowledgeSearchQuery.value = selectedText.value
+    knowledgeSearchVisible.value = true
+  }
+}
+
+const handleTextSelection = (e) => {
+  const selection = window.getSelection()
+  const text = selection.toString().trim()
+  
+  if (text.length > 0) {
+    selectedText.value = text
+    contextMenuX.value = e.pageX
+    contextMenuY.value = e.pageY
+    contextMenuVisible.value = true
+  } else {
+    contextMenuVisible.value = false
+  }
+}
+
+const handleClickOutside = () => {
+  contextMenuVisible.value = false
+}
+
 onMounted(async () => {
   await Promise.all([
     loadPatients(),
@@ -466,12 +528,20 @@ onMounted(async () => {
     loadCheckItems()
   ])
   connectWebSocket()
+  
+  // Add text selection listeners
+  document.addEventListener('mouseup', handleTextSelection)
+  document.addEventListener('click', handleClickOutside)
 })
 
 onBeforeUnmount(() => {
   if (stompClient) {
     stompClient.deactivate()
   }
+  
+  // Remove text selection listeners
+  document.removeEventListener('mouseup', handleTextSelection)
+  document.removeEventListener('click', handleClickOutside)
 })
 
 // WebSocket connection
@@ -1729,6 +1799,31 @@ const completeVisit = async () => {
     justify-content: center;
     background: #fff;
     border-radius: 6px;
+  }
+}
+
+// Context Menu
+.context-menu {
+  position: fixed;
+  background: white;
+  border: 1px solid #d9d9d9;
+  border-radius: 4px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  z-index: 9999;
+  min-width: 150px;
+  
+  .context-menu-item {
+    padding: 8px 16px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    color: #262626;
+    
+    &:hover {
+      background: #f5f5f5;
+    }
   }
 }
 </style>

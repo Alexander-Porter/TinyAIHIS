@@ -5,19 +5,15 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.lucene.analysis.core.KeywordAnalyzer;
-import org.apache.lucene.document.Document;
-import org.apache.lucene.document.Field;
-import org.apache.lucene.document.KnnFloatVectorField;
-import org.apache.lucene.document.StoredField;
-import org.apache.lucene.document.StringField;
+import org.apache.lucene.analysis.Analyzer;
+import org.apache.lucene.analysis.cn.smart.SmartChineseAnalyzer;
+import org.apache.lucene.document.*;
 import org.apache.lucene.index.IndexWriter;
 import org.apache.lucene.index.IndexWriterConfig;
 import org.apache.lucene.index.Term;
-import org.apache.lucene.search.IndexSearcher;
-import org.apache.lucene.search.KnnFloatVectorQuery;
-import org.apache.lucene.search.SearcherManager;
-import org.apache.lucene.search.TermQuery;
+import org.apache.lucene.queryparser.classic.MultiFieldQueryParser;
+import org.apache.lucene.queryparser.classic.QueryParser;
+import org.apache.lucene.search.*;
 import org.apache.lucene.store.FSDirectory;
 import org.apache.lucene.util.VectorUtil;
 import org.springframework.beans.factory.annotation.Value;
@@ -73,9 +69,13 @@ public class MedicalKnowledgeBase {
 
     @Value("${SILICONFLOW_API_KEY:}")
     private String apiKey;
+    
+    @Value("${medical.search.keyword-weight:0.3}")
+    private float defaultKeywordWeight;
 
     private IndexWriter indexWriter;
     private SearcherManager searcherManager;
+    private Analyzer analyzer;
     private final HttpClient httpClient = HttpClient.newHttpClient();
     private ExecutorService embeddingExecutor;
     private final ScheduledExecutorService rateRefillScheduler = new ScheduledThreadPoolExecutor(1);
@@ -149,33 +149,121 @@ public class MedicalKnowledgeBase {
      * Search using vector similarity; returns topK docs or empty on failure.
      */
     public List<MedicalDocument> search(String query, int topK) {
-        try {
-            float[] queryVector = embedText(query);
-            if (queryVector == null || searcherManager == null) return List.of();
+        return hybridSearch(query, topK, defaultKeywordWeight);
+    }
 
+    /**
+     * Hybrid search combining keyword and vector search with configurable weights
+     * @param query Search query
+     * @param topK Number of results
+     * @param keywordWeight Weight for keyword search (0.0-1.0), remaining weight goes to vector
+     * @return List of matched documents with relevance scoring
+     */
+    public List<MedicalDocument> hybridSearch(String query, int topK, float keywordWeight) {
+        if (searcherManager == null) return List.of();
+        
+        try {
             searcherManager.maybeRefresh();
             IndexSearcher searcher = searcherManager.acquire();
             try {
-                KnnFloatVectorQuery knnQuery = new KnnFloatVectorQuery("embedding", normalize(queryVector), topK);
-                var topDocs = searcher.search(knnQuery, topK);
-                List<MedicalDocument> results = new ArrayList<>();
-                var storedFields = searcher.storedFields();
-                for (var sd : topDocs.scoreDocs) {
-                    Document luceneDoc = storedFields.document(sd.doc);
-                    String id = luceneDoc.get("id");
-                    MedicalDocument doc = documents.get(id);
-                    if (doc != null) {
-                        String content = loadContent(id, doc.getContent());
-                        results.add(copyWithContent(doc, content));
+                Map<String, Float> docScores = new HashMap<>();
+                
+                // 1. Keyword search
+                if (keywordWeight > 0) {
+                    List<ScoredDoc> keywordResults = keywordSearch(searcher, query, topK * 2);
+                    float maxKeywordScore = keywordResults.isEmpty() ? 1.0f : keywordResults.get(0).score;
+                    for (ScoredDoc sd : keywordResults) {
+                        String id = sd.id;
+                        float normalizedScore = maxKeywordScore > 0 ? sd.score / maxKeywordScore : 0;
+                        docScores.put(id, normalizedScore * keywordWeight);
                     }
                 }
-                return results;
+                
+                // 2. Vector search
+                float vectorWeight = 1.0f - keywordWeight;
+                if (vectorWeight > 0) {
+                    float[] queryVector = embedText(query);
+                    if (queryVector != null) {
+                        KnnFloatVectorQuery knnQuery = new KnnFloatVectorQuery("embedding", normalize(queryVector), topK * 2);
+                        var topDocs = searcher.search(knnQuery, topK * 2);
+                        float maxVectorScore = topDocs.scoreDocs.length > 0 ? topDocs.scoreDocs[0].score : 1.0f;
+                        var storedFields = searcher.storedFields();
+                        for (var sd : topDocs.scoreDocs) {
+                            Document luceneDoc = storedFields.document(sd.doc);
+                            String id = luceneDoc.get("id");
+                            float normalizedScore = maxVectorScore > 0 ? sd.score / maxVectorScore : 0;
+                            docScores.merge(id, normalizedScore * vectorWeight, Float::sum);
+                        }
+                    }
+                }
+                
+                // 3. Sort by combined score and return topK
+                return docScores.entrySet().stream()
+                    .sorted(Map.Entry.<String, Float>comparingByValue().reversed())
+                    .limit(topK)
+                    .map(entry -> {
+                        MedicalDocument doc = documents.get(entry.getKey());
+                        if (doc != null) {
+                            String content = loadContent(entry.getKey(), doc.getContent());
+                            return copyWithContent(doc, content);
+                        }
+                        return null;
+                    })
+                    .filter(doc -> doc != null)
+                    .toList();
+                    
             } finally {
                 searcherManager.release(searcher);
             }
         } catch (Exception e) {
-            log.warn("Vector search failed, returning empty result", e);
+            log.warn("Hybrid search failed, returning empty result", e);
             return List.of();
+        }
+    }
+    
+    /**
+     * Keyword-only search using multi-field query
+     */
+    private List<ScoredDoc> keywordSearch(IndexSearcher searcher, String queryText, int topN) throws Exception {
+        // Use multi-field parser to search across multiple fields
+        String[] fields = {"disease_text", "department_text", "symptoms", "causes", "diagnosis", "treatment", "prevention", "content"};
+        Map<String, Float> boosts = new HashMap<>();
+        boosts.put("disease_text", 3.0f);      // Disease name most important
+        boosts.put("symptoms", 2.0f);           // Symptoms very important
+        boosts.put("diagnosis", 1.5f);          // Diagnosis important
+        boosts.put("treatment", 1.2f);          // Treatment relevant
+        boosts.put("department_text", 1.0f);    // Department relevant
+        boosts.put("causes", 1.0f);
+        boosts.put("prevention", 0.8f);
+        boosts.put("content", 0.5f);            // General content least weight
+        
+        MultiFieldQueryParser parser = new MultiFieldQueryParser(fields, analyzer, boosts);
+        parser.setDefaultOperator(QueryParser.Operator.OR);
+        
+        Query query = parser.parse(QueryParser.escape(queryText));
+        
+        TopDocs topDocs = searcher.search(query, topN);
+        List<ScoredDoc> results = new ArrayList<>();
+        var storedFields = searcher.storedFields();
+        
+        for (ScoreDoc sd : topDocs.scoreDocs) {
+            Document doc = storedFields.document(sd.doc);
+            String id = doc.get("id");
+            if (id != null) {
+                results.add(new ScoredDoc(id, sd.score));
+            }
+        }
+        
+        return results;
+    }
+    
+    private static class ScoredDoc {
+        final String id;
+        final float score;
+        
+        ScoredDoc(String id, float score) {
+            this.id = id;
+            this.score = score;
         }
     }
 
@@ -288,7 +376,8 @@ public class MedicalKnowledgeBase {
             path.toFile().mkdirs();
         }
         var dir = FSDirectory.open(path);
-        IndexWriterConfig config = new IndexWriterConfig(new KeywordAnalyzer());
+        this.analyzer = new SmartChineseAnalyzer();
+        IndexWriterConfig config = new IndexWriterConfig(analyzer);
         config.setOpenMode(IndexWriterConfig.OpenMode.CREATE_OR_APPEND);
         this.indexWriter = new IndexWriter(dir, config);
         this.searcherManager = new SearcherManager(indexWriter, null);
@@ -336,12 +425,71 @@ public class MedicalKnowledgeBase {
         if (indexWriter == null) return;
         float[] normalized = normalize(vector);
         Document luceneDoc = new Document();
+        
+        // For exact matching and retrieval
         luceneDoc.add(new StringField("id", doc.getId(), Field.Store.YES));
         luceneDoc.add(new StoredField("diseaseName", doc.getDiseaseName()));
+        luceneDoc.add(new StoredField("department", doc.getDepartment()));
+        
+        // For keyword search - using TextField for full-text search
+        luceneDoc.add(new TextField("disease_text", doc.getDiseaseName(), Field.Store.NO));
+        luceneDoc.add(new TextField("department_text", doc.getDepartment(), Field.Store.NO));
+        
+        // Parse content to extract searchable fields
+        String content = loadContent(doc.getId(), doc.getContent());
+        if (content != null && !content.isEmpty()) {
+            try {
+                JsonNode contentNode = objectMapper.readTree(content);
+                indexJsonFields(luceneDoc, contentNode);
+            } catch (Exception e) {
+                // If not JSON, index as plain text
+                luceneDoc.add(new TextField("content", content, Field.Store.NO));
+            }
+        }
+        
+        // Vector field for semantic search
         luceneDoc.add(new KnnFloatVectorField("embedding", normalized));
+        
         indexWriter.updateDocument(new Term("id", doc.getId()), luceneDoc);
         indexWriter.commit();
         searcherManager.maybeRefresh();
+    }
+    
+    private void indexJsonFields(Document luceneDoc, JsonNode node) {
+        // Index common medical fields
+        indexField(luceneDoc, "symptoms", node, "症状", "主要表现", "临床表现");
+        indexField(luceneDoc, "causes", node, "病因", "原因");
+        indexField(luceneDoc, "diagnosis", node, "诊断", "鉴别诊断");
+        indexField(luceneDoc, "treatment", node, "治疗", "治疗方法", "治疗方案");
+        indexField(luceneDoc, "prevention", node, "预防", "预防措施");
+        
+        // Index all text content for general search
+        StringBuilder allText = new StringBuilder();
+        extractAllText(node, allText);
+        if (allText.length() > 0) {
+            luceneDoc.add(new TextField("content", allText.toString(), Field.Store.NO));
+        }
+    }
+    
+    private void indexField(Document luceneDoc, String fieldName, JsonNode node, String... keys) {
+        for (String key : keys) {
+            JsonNode field = node.get(key);
+            if (field != null && field.isTextual()) {
+                luceneDoc.add(new TextField(fieldName, field.asText(), Field.Store.NO));
+            }
+        }
+    }
+    
+    private void extractAllText(JsonNode node, StringBuilder sb) {
+        if (node.isTextual()) {
+            sb.append(node.asText()).append(" ");
+        } else if (node.isArray()) {
+            for (JsonNode item : node) {
+                extractAllText(item, sb);
+            }
+        } else if (node.isObject()) {
+            node.fields().forEachRemaining(entry -> extractAllText(entry.getValue(), sb));
+        }
     }
 
     private String buildEmbedText(String diseaseName, String content) {

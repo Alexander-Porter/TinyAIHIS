@@ -13,8 +13,34 @@
             <robot-outlined v-else />
           </div>
           <div class="message-bubble">
+            <!-- Tool Call with Details -->
+            <div v-if="msg.type === 'tool_call'" class="tool-call-block">
+              <div class="tool-call-header">
+                <api-outlined /> 调用工具: {{ msg.data.name }}
+              </div>
+              <div class="tool-call-content">
+                <div class="tool-param">
+                  <span class="param-label">查询:</span>
+                  <span class="param-value">{{ msg.data.query }}</span>
+                </div>
+                <div class="tool-sources" v-if="msg.data.sources && msg.data.sources.length > 0">
+                  <span class="param-label">检索结果:</span>
+                  <div class="source-list">
+                    <div v-for="(source, idx) in msg.data.sources" :key="idx" class="source-item">
+                      <file-text-outlined /> {{ source.disease }} <a-tag size="small">{{ source.department }}</a-tag>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <!-- Tool Updates -->
+            <div v-else-if="msg.type === 'tool'" class="tool-update">
+              <search-outlined /> {{ msg.content }}
+            </div>
+            
             <!-- Thinking Process -->
-            <div v-if="msg.type === 'thought'" class="thought-block">
+            <div v-else-if="msg.type === 'thought'" class="thought-block">
               <div class="thought-header" @click="msg.collapsed = !msg.collapsed">
                 <bulb-outlined /> 思考过程
                 <down-outlined :rotate="msg.collapsed ? 0 : 180" class="collapse-icon" />
@@ -59,7 +85,8 @@
 import { ref, nextTick, onMounted, watch } from 'vue'
 import { 
   UserOutlined, RobotOutlined, LoadingOutlined, 
-  BulbOutlined, DownOutlined, CopyOutlined
+  BulbOutlined, DownOutlined, CopyOutlined,
+  ApiOutlined, FileTextOutlined, SearchOutlined
 } from '@ant-design/icons-vue'
 import { marked } from 'marked'
 
@@ -172,6 +199,23 @@ const sendMessage = async (text = null) => {
           
           if (currentEvent === 'session') {
             conversationId.value = data
+          } else if (currentEvent === 'tool_call') {
+            try {
+              const toolCall = JSON.parse(data)
+              messages.value.push({
+                role: 'assistant',
+                type: 'tool_call',
+                data: toolCall
+              })
+            } catch (e) {
+              console.error('Failed to parse tool_call', e)
+            }
+          } else if (currentEvent === 'tool') {
+            messages.value.push({
+              role: 'assistant',
+              type: 'tool',
+              content: data
+            })
           } else if (currentEvent === 'thought') {
             let lastMsg = messages.value[messages.value.length - 1]
             if (lastMsg && lastMsg.type === 'thought') {
@@ -296,6 +340,82 @@ onMounted(() => {
         padding: 12px;
         font-size: 14px;
         line-height: 1.6;
+        
+        .tool-call-block {
+          background: #e6f7ff;
+          border: 1px solid #91d5ff;
+          border-radius: 8px;
+          margin-bottom: 12px;
+          overflow: hidden;
+          
+          .tool-call-header {
+            padding: 8px 12px;
+            background: #bae7ff;
+            color: #0050b3;
+            font-size: 13px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+          }
+          
+          .tool-call-content {
+            padding: 10px 12px;
+            
+            .tool-param {
+              margin-bottom: 8px;
+              font-size: 13px;
+              
+              .param-label {
+                font-weight: 600;
+                color: #595959;
+                margin-right: 8px;
+              }
+              
+              .param-value {
+                color: #262626;
+                background: #fff;
+                padding: 2px 6px;
+                border-radius: 3px;
+              }
+            }
+            
+            .tool-sources {
+              .param-label {
+                font-weight: 600;
+                color: #595959;
+                display: block;
+                margin-bottom: 6px;
+              }
+              
+              .source-list {
+                .source-item {
+                  padding: 4px 8px;
+                  background: #fff;
+                  border-radius: 4px;
+                  margin-bottom: 4px;
+                  font-size: 12px;
+                  color: #262626;
+                  display: flex;
+                  align-items: center;
+                  gap: 6px;
+                }
+              }
+            }
+          }
+        }
+        
+        .tool-update {
+          color: #666;
+          font-size: 12px;
+          margin-bottom: 8px;
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          background: #f5f5f5;
+          padding: 4px 8px;
+          border-radius: 4px;
+        }
         
         .thought-block {
           background: #f6ffed;

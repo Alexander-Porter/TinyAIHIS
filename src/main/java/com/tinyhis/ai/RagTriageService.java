@@ -85,10 +85,26 @@ public class RagTriageService {
                 List<MedicalDocument> relevantDocs = knowledgeBase.search(query, topK);
                 
                 if (!relevantDocs.isEmpty()) {
+                    // Send structured tool call information
+                    Map<String, Object> toolCall = new HashMap<>();
+                    toolCall.put("name", "search_knowledge_base");
+                    toolCall.put("query", query);
+                    List<Map<String, String>> sources = relevantDocs.stream()
+                        .map(doc -> {
+                            Map<String, String> source = new HashMap<>();
+                            source.put("disease", doc.getDiseaseName());
+                            source.put("department", doc.getDepartment());
+                            return source;
+                        })
+                        .toList();
+                    toolCall.put("sources", sources);
+                    sendEvent(emitter, "tool_call", objectMapper.writeValueAsString(toolCall));
+                    
+                    // Also send simple text for display
                     String docNames = relevantDocs.stream()
-                        .map(MedicalDocument::getDiseaseName)
+                        .map(doc -> String.format("%s (%s)", doc.getDiseaseName(), doc.getDepartment()))
                         .collect(Collectors.joining(", "));
-                    sendEvent(emitter, "tool", "参考医学知识: " + docNames);
+                    sendEvent(emitter, "tool", "检索知识库: " + docNames);
                 }
                 
                 String context = buildContext(relevantDocs);
@@ -122,6 +138,29 @@ public class RagTriageService {
                 
                 // 2. Search Knowledge Base
                 List<MedicalDocument> relevantDocs = knowledgeBase.search(userQuery, topK);
+                
+                // Send tool call information if knowledge found
+                if (!relevantDocs.isEmpty()) {
+                    Map<String, Object> toolCall = new HashMap<>();
+                    toolCall.put("name", "search_knowledge_base");
+                    toolCall.put("query", userQuery);
+                    List<Map<String, String>> sources = relevantDocs.stream()
+                        .map(doc -> {
+                            Map<String, String> source = new HashMap<>();
+                            source.put("disease", doc.getDiseaseName());
+                            source.put("department", doc.getDepartment());
+                            return source;
+                        })
+                        .toList();
+                    toolCall.put("sources", sources);
+                    sendEvent(emitter, "tool_call", objectMapper.writeValueAsString(toolCall));
+                    
+                    String docNames = relevantDocs.stream()
+                        .map(doc -> String.format("%s (%s)", doc.getDiseaseName(), doc.getDepartment()))
+                        .collect(Collectors.joining(", "));
+                    sendEvent(emitter, "tool", "检索知识库: " + docNames);
+                }
+                
                 String knowledgeContext = buildContext(relevantDocs);
                 
                 // 3. Build System Prompt
@@ -520,4 +559,19 @@ public class RagTriageService {
         public TriageRecommendation triage(String symptoms, String bodyPart) {
             throw new UnsupportedOperationException("Synchronous triage is deprecated. Use streamTriage.");
         }
+        
+    /**
+     * Search knowledge base and return structured results for global text search.
+     * This method is intended for on-demand searches from the UI (e.g., text selection search)
+     * rather than RAG context retrieval. It uses the default hybrid search with
+     * keyword and vector matching.
+     * 
+     * @param query Search query text
+     * @param limit Maximum number of results to return
+     * @return List of matching documents with content
+     */
+    public List<MedicalDocument> searchKnowledge(String query, int limit) {
+        if (limit <= 0) limit = 5;
+        return knowledgeBase.search(query, limit);
+    }
 }

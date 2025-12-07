@@ -1,14 +1,18 @@
 package com.tinyhis.controller;
 
+import com.tinyhis.ai.MedicalDocument;
+import com.tinyhis.dto.KnowledgeSearchRequest;
 import com.tinyhis.dto.Result;
 import com.tinyhis.dto.TriageRequest;
 import com.tinyhis.dto.TriageResult;
 import com.tinyhis.service.TriageService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -68,5 +72,14 @@ public class TriageController {
         
         triageService.streamDoctorAssist(patientId, content, conversationId, emitter);
         return emitter;
+    }
+    
+    /**
+     * Global knowledge search endpoint for doctor workstation
+     */
+    @PostMapping("/search-knowledge")
+    public Result<List<MedicalDocument>> searchKnowledge(@RequestBody @Valid KnowledgeSearchRequest request) {
+        List<MedicalDocument> results = triageService.searchKnowledge(request.getQuery().trim(), request.getLimit());
+        return Result.success(results);
     }
 }

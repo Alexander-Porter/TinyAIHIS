@@ -13,8 +13,29 @@
             <robot-outlined v-else />
           </div>
           <div class="message-bubble">
+            <!-- Tool Call with Details -->
+            <div v-if="msg.type === 'tool_call'" class="tool-call-block">
+              <div class="tool-call-header">
+                <api-outlined /> 调用工具: {{ msg.data.name }}
+              </div>
+              <div class="tool-call-content">
+                <div class="tool-param">
+                  <span class="param-label">查询:</span>
+                  <span class="param-value">{{ msg.data.query }}</span>
+                </div>
+                <div class="tool-sources" v-if="msg.data.sources && msg.data.sources.length > 0">
+                  <span class="param-label">检索结果:</span>
+                  <div class="source-list">
+                    <div v-for="(source, idx) in msg.data.sources" :key="idx" class="source-item">
+                      <file-text-outlined /> {{ source.disease }} <a-tag size="small">{{ source.department }}</a-tag>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
             <!-- Tool/Status Updates -->
-            <div v-if="msg.type === 'tool'" class="tool-update">
+            <div v-else-if="msg.type === 'tool'" class="tool-update">
               <search-outlined /> {{ msg.content }}
             </div>
             
@@ -74,7 +95,7 @@ import { ref, nextTick, watch } from 'vue'
 import { 
   UserOutlined, RobotOutlined, LoadingOutlined, 
   SearchOutlined, BulbOutlined, DownOutlined,
-  MedicineBoxOutlined
+  MedicineBoxOutlined, ApiOutlined, FileTextOutlined
 } from '@ant-design/icons-vue'
 import { marked } from 'marked'
 
@@ -119,6 +140,18 @@ const handleEvent = (event, data) => {
 
   if (event === 'status') {
     statusText.value = data
+  } else if (event === 'tool_call') {
+    // Handle structured tool call information
+    try {
+      const toolCall = JSON.parse(data)
+      messages.value.push({
+        role: 'assistant',
+        type: 'tool_call',
+        data: toolCall
+      })
+    } catch (e) {
+      console.error('Failed to parse tool_call', e)
+    }
   } else if (event === 'tool') {
     messages.value.push({
       role: 'assistant',
@@ -317,6 +350,70 @@ watch(() => props.initialQuery, (val) => {
         max-width: 80%;
         padding: 12px;
         position: relative;
+        
+        .tool-call-block {
+          background: #e6f7ff;
+          border: 1px solid #91d5ff;
+          border-radius: 8px;
+          margin-bottom: 12px;
+          overflow: hidden;
+          
+          .tool-call-header {
+            padding: 8px 12px;
+            background: #bae7ff;
+            color: #0050b3;
+            font-size: 13px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+          }
+          
+          .tool-call-content {
+            padding: 10px 12px;
+            
+            .tool-param {
+              margin-bottom: 8px;
+              font-size: 13px;
+              
+              .param-label {
+                font-weight: 600;
+                color: #595959;
+                margin-right: 8px;
+              }
+              
+              .param-value {
+                color: #262626;
+                background: #fff;
+                padding: 2px 6px;
+                border-radius: 3px;
+              }
+            }
+            
+            .tool-sources {
+              .param-label {
+                font-weight: 600;
+                color: #595959;
+                display: block;
+                margin-bottom: 6px;
+              }
+              
+              .source-list {
+                .source-item {
+                  padding: 4px 8px;
+                  background: #fff;
+                  border-radius: 4px;
+                  margin-bottom: 4px;
+                  font-size: 12px;
+                  color: #262626;
+                  display: flex;
+                  align-items: center;
+                  gap: 6px;
+                }
+              }
+            }
+          }
+        }
         
         .tool-update {
           color: #666;
