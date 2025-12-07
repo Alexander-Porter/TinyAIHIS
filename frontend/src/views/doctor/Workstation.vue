@@ -345,6 +345,8 @@
         v-if="contextMenuVisible"
         class="context-menu"
         :style="{ top: contextMenuY + 'px', left: contextMenuX + 'px' }"
+        ref="contextMenuRef"
+        @mousedown.stop="handleContextMenuMouseDown"
       >
         <div class="context-menu-item" @click="searchSelectedText">
           <SearchOutlined /> 搜索知识库
@@ -390,6 +392,8 @@ const contextMenuVisible = ref(false)
 const contextMenuX = ref(0)
 const contextMenuY = ref(0)
 const selectedText = ref('')
+const contextMenuRef = ref(null)
+const suppressHideOnSelection = ref(false)
 
 const drugs = ref([])
 const templates = ref([])
@@ -502,22 +506,42 @@ const searchSelectedText = () => {
   }
 }
 
-const handleTextSelection = (e) => {
+const handleSelectionChange = () => {
+  // Only react to new selections; don't auto-hide here to avoid killing clicks on the menu
+  if (suppressHideOnSelection.value) return
+
   const selection = window.getSelection()
+  if (!selection || selection.isCollapsed) return
+
   const text = selection.toString().trim()
-  
-  if (text.length > 0) {
-    selectedText.value = text
-    contextMenuX.value = e.pageX
-    contextMenuY.value = e.pageY
-    contextMenuVisible.value = true
-  } else {
-    contextMenuVisible.value = false
-  }
+  if (!text) return
+
+  // Position the action button near the selected text
+  const range = selection.getRangeAt(0)
+  const rect = range.getBoundingClientRect()
+
+  selectedText.value = text
+  contextMenuX.value = rect.right + window.scrollX
+  contextMenuY.value = rect.bottom + window.scrollY + 8
+  contextMenuVisible.value = true
 }
 
-const handleClickOutside = () => {
+const handleClickOutside = (e) => {
+  const menuEl = contextMenuRef.value
+  if (menuEl && menuEl.contains(e.target)) return
+
+  const selection = window.getSelection()
+  const hasSelection = selection && !selection.isCollapsed && selection.toString().trim()
+  if (hasSelection) return
+
   contextMenuVisible.value = false
+}
+
+const handleContextMenuMouseDown = () => {
+  // Prevent selectionchange handler from immediately hiding the menu while clicking inside it
+  suppressHideOnSelection.value = true
+  // Reset shortly after to allow future selection changes to hide as normal
+  setTimeout(() => { suppressHideOnSelection.value = false }, 0)
 }
 
 onMounted(async () => {
@@ -529,8 +553,8 @@ onMounted(async () => {
   ])
   connectWebSocket()
   
-  // Add text selection listeners
-  document.addEventListener('mouseup', handleTextSelection)
+  // Show action when any text is selected
+  document.addEventListener('selectionchange', handleSelectionChange)
   document.addEventListener('click', handleClickOutside)
 })
 
@@ -540,7 +564,7 @@ onBeforeUnmount(() => {
   }
   
   // Remove text selection listeners
-  document.removeEventListener('mouseup', handleTextSelection)
+  document.removeEventListener('selectionchange', handleSelectionChange)
   document.removeEventListener('click', handleClickOutside)
 })
 

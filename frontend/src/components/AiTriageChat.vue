@@ -15,22 +15,31 @@
           <div class="message-bubble">
             <!-- Tool Call with Details -->
             <div v-if="msg.type === 'tool_call'" class="tool-call-block">
-              <div class="tool-call-header">
-                <api-outlined /> 调用工具: {{ msg.data.name }}
+              <!-- Search Knowledge Base -->
+              <div v-if="msg.data.name === 'search_knowledge_base'" class="tool-simple-info">
+                <search-outlined /> 
+                <span>已检索到 {{ msg.data.count || (msg.data.sources ? msg.data.sources.length : 0) }} 份相关信息</span>
               </div>
-              <div class="tool-call-content">
-                <div class="tool-param">
-                  <span class="param-label">查询:</span>
-                  <span class="param-value">{{ msg.data.query }}</span>
-                </div>
-                <div class="tool-sources" v-if="msg.data.sources && msg.data.sources.length > 0">
-                  <span class="param-label">检索结果:</span>
-                  <div class="source-list">
-                    <div v-for="(source, idx) in msg.data.sources" :key="idx" class="source-item">
-                      <file-text-outlined /> {{ source.disease }} <a-tag size="small">{{ source.department }}</a-tag>
-                    </div>
+
+              <!-- Recommend Department -->
+              <div v-else-if="msg.data.name === 'recommend_department'" class="dept-recommendation">
+                <div class="dept-card">
+                  <div class="dept-icon">
+                    <medicine-box-outlined />
                   </div>
+                  <div class="dept-info">
+                    <h4>{{ msg.data.department?.name }}</h4>
+                    <p>{{ msg.data.department?.location }}</p>
+                  </div>
+                  <a-button type="primary" @click="$emit('select', { department: msg.data.department?.name })">
+                    前往诊室
+                  </a-button>
                 </div>
+              </div>
+              
+              <!-- Fallback for other tools -->
+              <div v-else class="tool-call-header">
+                <api-outlined /> 调用工具: {{ msg.data.name }}
               </div>
             </div>
             
@@ -479,6 +488,59 @@ watch(() => props.initialQuery, (val) => {
             font-size: 14px;
             color: #333;
             margin-bottom: 12px;
+          }
+        }
+
+        .tool-simple-info {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          color: #8c8c8c;
+          font-size: 13px;
+          padding: 4px 0;
+        }
+
+        .dept-recommendation {
+          margin-top: 8px;
+          
+          .dept-card {
+            background: #fff;
+            border: 1px solid #e6f7ff;
+            border-radius: 8px;
+            padding: 16px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            box-shadow: 0 2px 8px rgba(24, 144, 255, 0.1);
+
+            .dept-icon {
+              font-size: 24px;
+              color: #1890ff;
+              background: #e6f7ff;
+              width: 48px;
+              height: 48px;
+              border-radius: 50%;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+            }
+
+            .dept-info {
+              flex: 1;
+              
+              h4 {
+                margin: 0 0 4px;
+                font-size: 16px;
+                font-weight: 600;
+                color: #262626;
+              }
+              
+              p {
+                margin: 0;
+                font-size: 13px;
+                color: #8c8c8c;
+              }
+            }
           }
         }
         
