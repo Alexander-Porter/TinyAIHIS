@@ -18,13 +18,7 @@ spring:
   autoconfigure:
     exclude:
       - org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration
-  ai:
-    openai:
-      api-key: ${SILICONFLOW_API_KEY:test-key}
-      base-url: https://api.siliconflow.cn/v1
-      chat:
-        options:
-          model: deepseek-ai/DeepSeek-V3.2
+
 
 mybatis-plus:
   mapper-locations: classpath:/mapper/**/*.xml
