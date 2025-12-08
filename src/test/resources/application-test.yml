@@ -27,7 +27,7 @@ mybatis-plus:
     map-underscore-to-camel-case: true
 
 jwt:
-  secret: TinyHISSecretKeyForJWTAuthentication2024VeryLongSecretKey
+  secret: ${JWT_SECRET:}
   expiration: 86400000
 
 hospital:
