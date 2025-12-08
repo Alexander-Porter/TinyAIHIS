@@ -640,11 +640,7 @@ jwt:
   secret: your_jwt_secret_key
   expiration: 86400000
 
-# 医院GPS位置（用于签到）
-hospital:
-  latitude: 39.9042
-  longitude: 116.4074
-  check-in-radius: 500
+
 ```
 
 ---
