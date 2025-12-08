@@ -67,16 +67,29 @@ services:
       SPRING_DATASOURCE_PASSWORD: ${MYSQL_PASSWORD:-tinyhis123}
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PORT: 6379
+      SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: 60
       SILICONFLOW_API_KEY: ${SILICONFLOW_API_KEY:-}
-      JWT_SECRET: ${JWT_SECRET:-TinyHISSecretKeyForJWTAuthentication2024VeryLongSecretKey}
+      SILICONFLOW_API_URL: ${SILICONFLOW_API_URL:-https://api.siliconflow.cn/v1}
+      SILICONFLOW_EMBEDDING_URL: ${SILICONFLOW_EMBEDDING_URL:-https://api.siliconflow.cn/v1/embeddings}
+      JWT_SECRET: ${JWT_SECRET}
       APP_DEMO_MODE: ${APP_DEMO_MODE:-false}
+      REGISTRATION_QUEUE_KEY: ${REGISTRATION_QUEUE_KEY:-registration:queue}
+      REGISTRATION_FEE: ${REGISTRATION_FEE:-50.00}
+      APP_QUEUE_MAX_BATCH_SIZE: ${APP_QUEUE_MAX_BATCH_SIZE:-50}
+      APP_QUEUE_MAX_RETRY_TIMES: ${APP_QUEUE_MAX_RETRY_TIMES:-50}
+      APP_QUEUE_POLL_INTERVAL_MS: ${APP_QUEUE_POLL_INTERVAL_MS:-10}
+      CHAT_HISTORY_PREFIX: ${CHAT_HISTORY_PREFIX:-chat:history:}
+      QUOTA_KEY_PREFIX: ${QUOTA_KEY_PREFIX:-schedule:quota:}
+      SCHEDULE_USERS_PREFIX: ${SCHEDULE_USERS_PREFIX:-schedule:users:}
       TZ: Asia/Shanghai
+      UPLOAD_DIR: /app/uploads
     ports:
       - "8080:8080"
     volumes:
       - ./medical-knowledge:/app/medical-knowledge
       - ./vector-index:/app/vector-index
       - backend_logs:/app/logs
+      - uploads_data:/app/uploads
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/actuator/health"]
       interval: 30s
@@ -102,8 +115,15 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+    environment:
+        VITE_PROXY_TARGET: ${VITE_PROXY_TARGET:-http://localhost:8080}
+        VITE_PROXY_WS: ${VITE_PROXY_WS:-ws://localhost:8080}
+        VITE_APP_URL: ${VITE_APP_URL:-http://localhost:5173}
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:8080/api}
     networks:
       - tinyhis-network
+    volumes:
+      - uploads_data:/usr/share/nginx/html/uploads:rw
 
 volumes:
   mysql_data:
@@ -111,6 +131,8 @@ volumes:
   redis_data:
     driver: local
   backend_logs:
+    driver: local
+  uploads_data:
     driver: local
 
 networks:

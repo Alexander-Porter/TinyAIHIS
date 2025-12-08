@@ -24,13 +24,17 @@ RUN addgroup -S tinyhis && adduser -S tinyhis -G tinyhis
 
 # Copy the built jar file from build stage
 COPY --from=build /app/target/tinyhis-*.jar app.jar
+COPY docker/backend-entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 
 # Create directories for knowledge base, vector index, and logs
-RUN mkdir -p /app/medical-knowledge /app/vector-index /app/logs && \
+RUN mkdir -p /app/medical-knowledge /app/vector-index /app/logs /app/uploads && \
     chown -R tinyhis:tinyhis /app
 
-# Switch to non-root user
-USER tinyhis
+# Install tools for switching users and entrypoint handling
+RUN apk add --no-cache su-exec
+
+# Do not switch to non-root here; entrypoint will switch to tinyhis after chown
 
 # Expose port
 EXPOSE 8080
@@ -42,5 +46,5 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
 # JVM options for container environment
 ENV JAVA_OPTS="-Xms256m -Xmx512m -XX:+UseG1GC -XX:+UseContainerSupport"
 
-# Run the application
-ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar app.jar"]
+# Run the application via entrypoint which will chown uploads and drop privileges
+ENTRYPOINT ["/entrypoint.sh"]
