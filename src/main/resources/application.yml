@@ -1,25 +1,29 @@
 server:
-  port: 8080
+  port: ${SERVER_PORT:8080}
 
 spring:
   profiles:
     active: dev
   datasource:
-    url: jdbc:mysql://localhost:3306/tinyhis?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
-    username: root
-    password: root
+    url: jdbc:mysql://${MYSQL_HOST:localhost}:${MYSQL_PORT:3306}/${MYSQL_DB:tinyhis}?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+    username: ${MYSQL_USER:root}
+    password: ${MYSQL_PASSWORD:root}
     driver-class-name: com.mysql.cj.jdbc.Driver
   data:
     redis:
-      host: localhost
-      port: 6379
-      database: 0
-
-
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      database: ${REDIS_DB:0}
+  servlet:
+    multipart:
+      max-file-size: 50MB
+      max-request-size: 50MB
+  
 # SiliconFlow manual client configuration (used by RagTriageService)
 siliconflow:
   api-key: ${SILICONFLOW_API_KEY:}
   model: ${SILICONFLOW_MODEL:deepseek-ai/DeepSeek-V3.2}
+  api-url: ${SILICONFLOW_API_URL:https://api.siliconflow.cn/v1}
 
 mybatis-plus:
   mapper-locations: classpath:/mapper/**/*.xml
@@ -29,20 +33,18 @@ mybatis-plus:
 
 # JWT Configuration
 jwt:
-  secret: TinyHISSecretKeyForJWTAuthentication2024VeryLongSecretKey
+  secret: ${JWT_SECRET:}
   expiration: 86400000 # 24 hours in milliseconds
 
-# Hospital location for GPS check-in
-hospital:
-  latitude: 39.9042
-  longitude: 116.4074
-  check-in-radius: 500 # meters
+
 
 # RAG Triage Configuration
 triage:
   rag:
     enabled: true
     top-k: 3
+  sse:
+    timeout-ms: 180000
 
 # Medical Knowledge Base
 medical:
@@ -53,6 +55,20 @@ medical:
 # Application Configuration
 app:
   demo-mode: ${APP_DEMO_MODE:false}
+  upload-dir: ${UPLOAD_DIR:/app/uploads}
+  registration:
+    fee: ${REGISTRATION_FEE:50.00}
+  lab:
+    default-price: ${LAB_DEFAULT_PRICE:100.00}
+  queue:
+    max-batch-size: ${APP_QUEUE_MAX_BATCH_SIZE:50}
+    max-retry-times: ${APP_QUEUE_MAX_RETRY_TIMES:50}
+    poll-interval-ms: ${APP_QUEUE_POLL_INTERVAL_MS:10}
+  redis:
+    registration-queue: ${REGISTRATION_QUEUE_KEY:registration:queue}
+    quota-prefix: ${QUOTA_KEY_PREFIX:schedule:quota:}
+    user-prefix: ${SCHEDULE_USERS_PREFIX:schedule:users:}
+    chat-history-prefix: ${CHAT_HISTORY_PREFIX:chat:history:}
 
 logging:
   level:

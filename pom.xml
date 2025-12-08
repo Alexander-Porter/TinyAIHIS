@@ -22,7 +22,7 @@
         <mybatis-plus.version>3.5.5</mybatis-plus.version>
         <jjwt.version>0.12.3</jjwt.version>
         <easyexcel.version>3.3.3</easyexcel.version>
-        <spring-ai.version>1.0.0-M1</spring-ai.version>
+        <!-- Removed unused Spring AI property as project uses direct HTTP client for SSE and tool call control -->
     </properties>
 
     <dependencies>
