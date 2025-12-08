@@ -18,9 +18,15 @@ const router = useRouter()
 const initialQuery = ref('')
 
 const handleSelect = (data) => {
+  if (!data) return
+  const deptId = data.deptId ?? data.department?.id ?? ''
+  const deptName = data.deptName ?? data.department?.name ?? data.department ?? ''
   router.push({
     path: '/patient/appointment',
-    query: { deptName: data.department }
+    query: {
+      ...(deptId ? { deptId: String(deptId) } : {}),
+      ...(deptName ? { deptName } : {})
+    }
   })
 }
 </script>

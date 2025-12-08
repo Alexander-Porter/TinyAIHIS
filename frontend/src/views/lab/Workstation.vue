@@ -63,7 +63,7 @@
         </div>
 
         <div class="editor-container" v-if="currentOrder.status === 1">
-          <div class="editor-label">检验结果（支持富文本格式）</div>
+          <div class="editor-label">检验结果</div>
           <div class="editor-wrapper">
             <Toolbar
               :editor="editorRef"
@@ -95,6 +95,11 @@
         <div class="result-view" v-else>
           <div class="view-label">检验结果</div>
           <div class="result-content" v-html="currentOrder.resultText || '暂无结果'"></div>
+          <div class="image-gallery" v-if="uploadedImages.length">
+            <div class="img-item" v-for="img in uploadedImages" :key="img">
+              <img :src="img" alt="检验图片" />
+            </div>
+          </div>
         </div>
       </div>
 
@@ -118,15 +123,28 @@ const currentOrder = ref(null)
 const submitting = ref(false)
 const filterStatus = ref('pending')
 const resultHtml = ref('')
+const uploadedImages = computed(() => parseImages(currentOrder.value?.resultImages))
 
 // Editor
 const editorRef = shallowRef()
 const toolbarConfig = {
-  excludeKeys: ['uploadVideo', 'uploadImage', 'insertVideo', 'insertImage', 'group-video', 'group-image']
+  excludeKeys: ['uploadVideo', 'insertVideo', 'group-video']
 }
 const editorConfig = {
   placeholder: '请输入检验结果...',
   MENU_CONF: {}
+}
+
+editorConfig.MENU_CONF.uploadImage = {
+  async customUpload(file, insertFn) {
+    try {
+      const url = await labApi.uploadImage(file)
+      insertFn(url, file.name)
+    } catch (e) {
+      message.error('图片上传失败，请重试')
+      console.error(e)
+    }
+  }
 }
 
 // Table columns
@@ -164,7 +182,7 @@ const handleCreated = (editor) => {
 
 const loadOrders = async () => {
   try {
-    orders.value = await labApi.getPending()
+    orders.value = await labApi.getOrders(filterStatus.value)
   } catch (e) {
     console.error('Failed to load orders', e)
   }
@@ -184,7 +202,7 @@ const getStatusColor = (status) => {
 
 const getStatusText = (status) => {
   const texts = { 0: '待缴费', 1: '待检验', 2: '已完成' }
-  return texts[status] || '未知'
+  return texts[status] || '待缴费'
 }
 
 const clearResult = () => {
@@ -202,10 +220,11 @@ const submitResult = async () => {
 
   submitting.value = true
   try {
+    const images = extractImageSources(resultHtml.value)
     await labApi.submitResult({
       orderId: currentOrder.value.orderId,
       resultText: resultHtml.value,
-      resultImages: ''
+      resultImages: JSON.stringify(images)
     })
     message.success('检验结果已提交')
     currentOrder.value = null
@@ -273,6 +292,24 @@ const applyTemplate = (type) => {
   if (templates[type]) {
     resultHtml.value = templates[type]
   }
+}
+
+function parseImages(val) {
+  if (!val) return []
+  try {
+    const arr = JSON.parse(val)
+    return Array.isArray(arr) ? arr : []
+  } catch (e) {
+    return []
+  }
+}
+
+function extractImageSources(html) {
+  if (!html) return []
+  const parser = new DOMParser()
+  const doc = parser.parseFromString(html, 'text/html')
+  const imgs = Array.from(doc.querySelectorAll('img'))
+  return Array.from(new Set(imgs.map(img => img.getAttribute('src')).filter(Boolean)))
 }
 </script>
 
@@ -456,6 +493,29 @@ const applyTemplate = (type) => {
 
         :deep(h3) {
           margin-top: 0;
+        }
+      }
+
+      .image-gallery {
+        margin-top: 12px;
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+        gap: 10px;
+
+        .img-item {
+          border: 1px solid #e8e8e8;
+          border-radius: 4px;
+          background: #fff;
+          padding: 6px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+
+          img {
+            max-width: 100%;
+            max-height: 160px;
+            object-fit: contain;
+          }
         }
       }
     }

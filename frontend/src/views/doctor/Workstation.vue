@@ -47,7 +47,7 @@
               </div>
               <div class="patient-status">
                 <a-tag :color="getStatusColor(p.status)" size="small">
-                  {{ getStatusText(p.status) }}
+                  {{ getStatusText(p) }}
                 </a-tag>
                 <a-tag v-if="p.labOrders?.some(l => l.status === 2)" color="success" size="small">
                   检查完成
@@ -67,7 +67,7 @@
               <span class="name">{{ currentPatient.patientName }}</span>
               <span class="meta">{{ currentPatient.gender === 1 ? '男' : '女' }} {{ currentPatient.age }}岁</span>
               <a-tag v-if="currentPatient.status === 3" color="processing">就诊中</a-tag>
-              <a-tag v-else color="warning">暂停中</a-tag>
+              <a-tag v-else color="warning">不处在就诊状态</a-tag>
             </div>
             <div class="actions">
               <a-button v-if="currentPatient.status === 3" size="small" @click="pauseCurrentPatient">
@@ -428,7 +428,9 @@ const shiftLabel = computed(() => {
   if (hour < 18) return '下午班'
   return '急诊班'
 })
-
+const isEmergency = (reg) => {
+  return reg.shiftType === 'ER' || reg.shiftType === '急诊(全天)' || reg.shiftType === '急诊'
+}
 // 患者状态: 0=待缴费, 1=待签到, 2=候诊中, 3=就诊中, 4=已完成, 5=已取消
 const waitingCount = computed(() => patients.value.filter(p => p.status === 1 || p.status === 2).length)
 
@@ -445,7 +447,13 @@ const getStatusColor = (status) => {
   return colors[status] || 'default'
 }
 
-const getStatusText = (status) => {
+const getStatusText = (parent) => {
+  const status = parent.status
+  const isER=isEmergency(parent)
+  if (isER) {
+    const textsER = { 0: '待缴费(急诊)', 1: '候诊中(急诊)', 2: '候诊中(急诊)', 3: '就诊中(急诊)', 4: '已完成(急诊)', 5: '已取消(急诊)' }
+    return textsER[status] || '未知(急诊)'
+  }
   const texts = { 0: '待缴费', 1: '待签到', 2: '候诊中', 3: '就诊中', 4: '已完成', 5: '已取消' }
   return texts[status] || '未知'
 }
@@ -860,7 +868,7 @@ const getLabStatusColor = (status) => {
 
 const getLabStatusText = (status) => {
   const texts = { 0: '待缴费', 1: '待检查', 2: '已完成' }
-  return texts[status] || '未知'
+  return texts[status] || '待缴费'
 }
 
 // 解析病历内容 - 支持 "标签: 内容" 格式
@@ -1085,7 +1093,8 @@ const printLabOrders = async () => {
 const generateEmrHtml = async (data) => {
   const now = new Date()
   const regId = currentPatient.value?.regId || ''
-  const qrUrl = `http://localhost:5173/patient/payment?regId=${regId}`
+  const APP_BASE_URL = import.meta.env.VITE_APP_URL || window.location.origin
+  const qrUrl = `${APP_BASE_URL}/patient/payment?regId=${regId}`
   const qrSrc = await QRCode.toDataURL(qrUrl, { width: 100, margin: 0 })
   
   return `<!DOCTYPE html>
@@ -1164,7 +1173,8 @@ const generatePrescriptionHtml = async (items) => {
   const dateStr = `${now.getFullYear()}年${now.getMonth() + 1}月${now.getDate()}日`
   const total = items.reduce((sum, item) => sum + (item.price || 0) * (item.quantity || 1), 0)
   const regId = currentPatient.value?.regId || ''
-  const qrUrl = `http://localhost:5173/patient/payment?regId=${regId}`
+  const APP_BASE_URL = import.meta.env.VITE_APP_URL || window.location.origin
+  const qrUrl = `${APP_BASE_URL}/patient/payment?regId=${regId}`
   const qrSrc = await QRCode.toDataURL(qrUrl, { width: 100, margin: 0 })
   
   const drugListHtml = items.map((item, idx) => `
@@ -1260,7 +1270,8 @@ const generateLabHtml = async (items) => {
   const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
   const total = items.reduce((sum, item) => sum + (item.price || 0), 0)
   const regId = currentPatient.value?.regId || ''
-  const qrUrl = `http://localhost:5173/patient/payment?regId=${regId}`
+  const APP_BASE_URL = import.meta.env.VITE_APP_URL || window.location.origin
+  const qrUrl = `${APP_BASE_URL}/patient/payment?regId=${regId}`
   const qrSrc = await QRCode.toDataURL(qrUrl, { width: 100, margin: 0 })
   
   const itemsHtml = items.map((item, idx) => `

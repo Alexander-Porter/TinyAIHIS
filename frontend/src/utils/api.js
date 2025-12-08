@@ -121,9 +121,16 @@ export const queueApi = {
 
 // Lab APIs
 export const labApi = {
-  getPending: () => api.get('/lab/pending'),
+  getOrders: (status = 'pending') => api.get('/lab/orders', { params: { status } }),
   getOrder: (id) => api.get(`/lab/${id}`),
   pay: (id) => api.post(`/lab/pay/${id}`),
+  uploadImage: (file) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    return api.post('/lab/upload', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    })
+  },
   submitResult: (data) => api.post('/lab/result', data),
   getByPatient: (patientId) => api.get(`/lab/patient/${patientId}`),
 }

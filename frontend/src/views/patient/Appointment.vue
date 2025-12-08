@@ -88,7 +88,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { NavBar as VanNavBar, Button as VanButton, showToast, showLoadingToast, closeToast } from 'vant'
 import { scheduleApi, registrationApi } from '@/utils/api'
@@ -105,6 +105,7 @@ const selectedDate = ref(null)
 const selectedDept = ref(null)
 const selectedSchedule = ref(null)
 const newRegId = ref(null)
+const lastPrefillToken = ref('')
 
 const dates = computed(() => {
   const list = []
@@ -124,10 +125,46 @@ const dates = computed(() => {
 onMounted(async () => {
   try {
     departments.value = await scheduleApi.getDepartments()
+    preselectDeptFromQuery()
   } catch (e) {
     console.error('Failed to load departments', e)
   }
 })
+
+const preselectDeptFromQuery = async () => {
+  if (!departments.value.length) return
+  const queryDeptId = route.query.deptId ? Number(route.query.deptId) : null
+  const queryDeptName = route.query.deptName
+  if (!queryDeptId && !queryDeptName) return
+
+  const token = `${queryDeptId ?? ''}-${queryDeptName ?? ''}`
+  if (lastPrefillToken.value === token && selectedDept.value) return
+
+  const targetDept = departments.value.find((dept) => {
+    if (queryDeptId) {
+      return Number(dept.deptId) === Number(queryDeptId)
+    }
+    if (queryDeptName) {
+      return dept.deptName === queryDeptName
+    }
+    return false
+  })
+
+  if (!targetDept) return
+  if (!selectedDate.value) {
+    const firstDate = dates.value[0]?.value || new Date().toISOString().split('T')[0]
+    selectedDate.value = firstDate
+  }
+  lastPrefillToken.value = token
+  await selectDept(targetDept)
+}
+
+watch(
+  () => [route.query.deptId, route.query.deptName, departments.value.length],
+  () => {
+    preselectDeptFromQuery()
+  }
+)
 
 const selectDate = (date) => {
   selectedDate.value = date

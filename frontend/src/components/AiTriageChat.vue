@@ -31,7 +31,7 @@
                     <h4>{{ msg.data.department?.name }}</h4>
                     <p>{{ msg.data.department?.location }}</p>
                   </div>
-                  <a-button type="primary" @click="$emit('select', { department: msg.data.department?.name })">
+                  <a-button type="primary" @click="handleDeptSelect(msg.data.department)">
                     前往诊室
                   </a-button>
                 </div>
@@ -69,7 +69,7 @@
                 <p v-if="msg.data.possibleDiseases"><strong>可能疾病：</strong>{{ msg.data.possibleDiseases }}</p>
               </div>
               <div class="result-actions">
-                <a-button type="primary" block @click="$emit('select', msg.data)">
+                <a-button type="primary" block @click="handleResultSelect(msg.data)">
                   去挂号
                 </a-button>
               </div>
@@ -297,6 +297,31 @@ watch(() => props.initialQuery, (val) => {
     sendMessage()
   }
 })
+
+const handleDeptSelect = (department) => {
+  if (!department) return
+  const deptId = department.id ?? department.deptId ?? null
+  const deptName = department.name ?? department.deptName ?? ''
+  emit('select', {
+    deptId,
+    deptName,
+    department: deptName,
+    raw: department
+  })
+}
+
+const handleResultSelect = (result) => {
+  if (!result) return
+  const deptInfo = typeof result.department === 'object' ? result.department : null
+  const deptId = result.deptId ?? deptInfo?.id ?? deptInfo?.deptId ?? null
+  const deptName = result.deptName ?? (deptInfo ? (deptInfo.name ?? deptInfo.deptName) : (typeof result.department === 'string' ? result.department : ''))
+  emit('select', {
+    deptId,
+    deptName,
+    department: deptName,
+    raw: result
+  })
+}
 </script>
 
 <style scoped lang="scss">

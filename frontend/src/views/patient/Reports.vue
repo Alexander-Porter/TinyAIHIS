@@ -25,9 +25,20 @@
           <van-icon name="cross" @click="showDetail = false" />
         </div>
         <div class="detail-meta">
-          <span>报告时间：{{ formatTime(currentReport.resultTime) }}</span>
+          <span>报告时间：{{ formatTime(currentReport.updateTime) }}</span>
         </div>
         <div class="detail-content" v-html="currentReport.resultText"></div>
+        <div class="image-list" v-if="parseImages(currentReport.resultImages).length">
+          <van-image
+            v-for="img in parseImages(currentReport.resultImages)"
+            :key="img"
+            width="100%"
+            fit="contain"
+            :src="img"
+            lazy-load
+            class="detail-image"
+          />
+        </div>
       </div>
     </van-popup>
   </div>
@@ -35,7 +46,7 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import { NavBar as VanNavBar, Empty as VanEmpty, Popup as VanPopup, Icon as VanIcon } from 'vant'
+import { NavBar as VanNavBar, Empty as VanEmpty, Popup as VanPopup, Icon as VanIcon, Image as VanImage } from 'vant'
 import { labApi } from '@/utils/api'
 import { useUserStore } from '@/stores/user'
 
@@ -58,6 +69,16 @@ const viewReport = (report) => {
   if (report.status === 2 && report.resultText) {
     currentReport.value = report
     showDetail.value = true
+  }
+}
+
+function parseImages(val) {
+  if (!val) return []
+  try {
+    const arr = JSON.parse(val)
+    return Array.isArray(arr) ? arr : []
+  } catch (e) {
+    return []
   }
 }
 
@@ -178,6 +199,19 @@ const formatTime = (time) => {
       
       :deep(strong) {
         font-weight: 600;
+      }
+    }
+
+    .image-list {
+      padding: 12px 16px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+
+      .detail-image {
+        border: 1px solid #eee;
+        border-radius: 8px;
+        background: #fff;
       }
     }
   }
