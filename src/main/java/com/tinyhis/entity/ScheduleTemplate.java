@@ -19,7 +19,7 @@ public class ScheduleTemplate {
     
     private Long deptId;      // Department ID
     private Long doctorId;    // Doctor ID
-    private Long roomId;      // Default Consulting Room ID
+    private Long roomId;      // 默认诊室 ID
     private Integer dayOfWeek; // 0=Monday, 1=Tuesday, ..., 6=Sunday
     private String shiftType; // AM, PM or ER (emergency)
     private Integer maxQuota; // Maximum appointments per shift

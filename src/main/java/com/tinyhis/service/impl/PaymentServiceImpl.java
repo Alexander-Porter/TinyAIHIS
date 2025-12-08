@@ -13,6 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.util.List;
+import org.springframework.beans.factory.annotation.Value;
 
 /**
  * Payment Service Implementation (模拟缴费)
@@ -25,6 +26,10 @@ public class PaymentServiceImpl implements PaymentService {
     private final PrescriptionMapper prescriptionMapper;
     private final LabOrderMapper labOrderMapper;
     private final DrugDictMapper drugDictMapper;
+    @Value("${app.registration.fee:50.00}")
+    private BigDecimal registrationFee;
+    @Value("${app.lab.default-price:100.00}")
+    private BigDecimal defaultLabFee;
 
     @Override
     @Transactional
@@ -66,7 +71,7 @@ public class PaymentServiceImpl implements PaymentService {
         registration.setStatus(1); // Paid, waiting for check-in
         registrationMapper.updateById(registration);
 
-        BigDecimal amount = registration.getFee() != null ? registration.getFee() : new BigDecimal("50.00");
+        BigDecimal amount = registration.getFee() != null ? registration.getFee() : registrationFee;
         return new PaymentResponse(true, "挂号费支付成功", amount, "REGISTRATION");
     }
 
@@ -115,7 +120,7 @@ public class PaymentServiceImpl implements PaymentService {
         order.setStatus(1); // Paid, pending examination
         labOrderMapper.updateById(order);
 
-        BigDecimal amount = order.getPrice() != null ? order.getPrice() : new BigDecimal("100.00");
+        BigDecimal amount = order.getPrice() != null ? order.getPrice() : defaultLabFee;
         return new PaymentResponse(true, "检查费支付成功", amount, "LAB");
     }
 }

@@ -11,10 +11,10 @@ import org.apache.ibatis.annotations.Update;
 @Mapper
 public interface RegistrationMapper extends BaseMapper<Registration> {
 
-    @Update("UPDATE registration r " +
+        @Update("UPDATE registration r " +
             "INNER JOIN schedule s ON r.schedule_id = s.schedule_id " +
-            "SET r.status = 6 " +
-            "WHERE r.status IN (0, 1, 2) AND s.schedule_date < CURDATE()")
+            "SET r.status = CASE r.status WHEN 3 THEN 4 ELSE 5 END " +
+            "WHERE r.status IN (0, 1, 2, 3) AND s.schedule_date < CURDATE()")
     int expirePastRegistrations();
 }
 

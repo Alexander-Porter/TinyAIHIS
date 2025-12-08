@@ -15,7 +15,7 @@ import java.util.List;
 
 /**
  * AI Triage Service Implementation
- * Uses RAG (Retrieval Augmented Generation) with Spring AI
+ * Uses RAG (Retrieval Augmented Generation) with direct HTTP client to SiliconFlow/DeepSeek
  */
 @Slf4j
 @Service

@@ -199,7 +199,7 @@ public class AdminController {
     @GetMapping("/stats")
     public Result<Map<String, Object>> getStats() {
         Map<String, Object> stats = new HashMap<>();
-        // TODO: Implement actual statistics queries
+        // TODO: 实现真实的统计查询
         stats.put("patients", 0);
         stats.put("doctors", sysUserMapper.selectCount(new LambdaQueryWrapper<SysUser>()
                 .in(SysUser::getRole, "DOCTOR", "CHIEF")));

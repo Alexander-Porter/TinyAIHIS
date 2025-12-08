@@ -66,6 +66,7 @@ public class ScheduleTemplateServiceImpl extends ServiceImpl<ScheduleTemplateMap
                         Schedule schedule = new Schedule();
                         schedule.setDeptId(template.getDeptId());
                         schedule.setDoctorId(template.getDoctorId());
+                        schedule.setRoomId(template.getRoomId());
                         schedule.setScheduleDate(scheduleDate);
                         schedule.setShiftType(template.getShiftType());
                         schedule.setMaxPatients(template.getMaxQuota());

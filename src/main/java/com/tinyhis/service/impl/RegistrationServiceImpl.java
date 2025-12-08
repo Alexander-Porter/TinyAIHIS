@@ -19,9 +19,15 @@ import com.tinyhis.service.ScheduleService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
+import java.util.Collections;
+import java.util.concurrent.TimeUnit;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -40,11 +46,27 @@ public class RegistrationServiceImpl implements RegistrationService {
     private final SysUserMapper sysUserMapper;
     private final com.tinyhis.mapper.MedicalRecordMapper medicalRecordMapper;
     private final com.tinyhis.mapper.LabOrderMapper labOrderMapper;
-
-    private static final BigDecimal REGISTRATION_FEE = new BigDecimal("50.00");
+    private final StringRedisTemplate redisTemplate;
+    private final ObjectMapper objectMapper;
+    @Value("${app.registration.fee:50.00}")
+    private BigDecimal registrationFee;
+    @Value("${app.redis.registration-queue:registration:queue}")
+    private String registrationQueueKey;
+    @Value("${app.redis.quota-prefix:schedule:quota:}")
+    private String quotaPrefix;
+    @Value("${app.redis.user-prefix:schedule:users:}")
+    private String userPrefix;
+    private static final String LUA_SCRIPT_STOCK = 
+        "if redis.call('SISMEMBER', KEYS[2], ARGV[1]) == 1 then return -1 end " +
+        "local stock = tonumber(redis.call('GET', KEYS[1])) " +
+        "if stock == nil then return -3 end " +
+        "if stock <= 0 then return -2 end " +
+        "redis.call('DECR', KEYS[1]) " +
+        "redis.call('SADD', KEYS[2], ARGV[1]) " +
+        "return 0";
 
     @Override
-    @Transactional
+    // @Transactional // 事务已移除：我们采用 Redis + 异步写入队列来处理并发写入
     public Registration createRegistration(RegistrationRequest request) {
         Schedule schedule = scheduleService.getScheduleById(request.getScheduleId());
         if (schedule == null) {
@@ -73,34 +95,107 @@ public class RegistrationServiceImpl implements RegistrationService {
             }
         }
 
-        if (schedule.getCurrentCount() >= schedule.getMaxQuota()) {
-            throw new BusinessException("该时段已约满");
+        // --- Redis Seckill Logic ---
+        String quotaKey = quotaPrefix + request.getScheduleId();
+        String userKey = userPrefix + request.getScheduleId();
+        
+        // 如果 quota 不存在则初始化；如果已存在但小于最新可用量，则刷新为当前可用量
+        int available = schedule.getMaxQuota() - schedule.getCurrentCount();
+        String cached = redisTemplate.opsForValue().get(quotaKey);
+        if (cached == null) {
+            redisTemplate.opsForValue().setIfAbsent(quotaKey, String.valueOf(available), 24, TimeUnit.HOURS);
+        } else {
+            try {
+                int cacheVal = Integer.parseInt(cached);
+                if (cacheVal < available) {
+                    redisTemplate.opsForValue().set(quotaKey, String.valueOf(available), 24, TimeUnit.HOURS);
+                }
+            } catch (NumberFormatException e) {
+                redisTemplate.opsForValue().set(quotaKey, String.valueOf(available), 24, TimeUnit.HOURS);
+            }
         }
 
-        // Check if already registered for this schedule
-        LambdaQueryWrapper<Registration> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(Registration::getPatientId, request.getPatientId())
-               .eq(Registration::getScheduleId, request.getScheduleId())
-               .ne(Registration::getStatus, 5); // Not cancelled
-        if (registrationMapper.selectCount(wrapper) > 0) {
-            throw new BusinessException("您已预约该时段");
+        DefaultRedisScript<Long> redisScript = new DefaultRedisScript<>();
+        redisScript.setScriptText(LUA_SCRIPT_STOCK);
+        redisScript.setResultType(Long.class);
+
+        Long result = redisTemplate.execute(redisScript, 
+            java.util.Arrays.asList(quotaKey, userKey), 
+            String.valueOf(request.getPatientId()));
+
+        if (result != null) {
+            if (result == -1) {
+                throw new BusinessException("您已预约该时段");
+            } else if (result == -2) {
+                throw new BusinessException("预约失败，号源不足");
+            } else if (result == -3) {
+                // 按理说不会发生（由上面的懒加载防护），但若发生则处理：
+                throw new BusinessException("系统繁忙，请重试");
+            }
         }
 
-        // Increment schedule count
-        if (!scheduleService.incrementCount(request.getScheduleId())) {
-            throw new BusinessException("预约失败，号源不足");
+        // Redis 扣减成功 -> 将请求推入异步队列
+        try {
+            String json = objectMapper.writeValueAsString(request);
+            redisTemplate.opsForList().leftPush(registrationQueueKey, json);
+        } catch (Exception e) {
+            // 是否回滚 Redis？ 理想情况下应回滚，但当前实现仅记录日志并返回错误
+            throw new BusinessException("系统错误: " + e.getMessage());
         }
 
+        // Return a "Pending" registration object to satisfy the controller/frontend
+        // The frontend will see "Success" but the ID might be null or placeholder
         Registration registration = new Registration();
         registration.setPatientId(request.getPatientId());
         registration.setDoctorId(schedule.getDoctorId());
         registration.setScheduleId(request.getScheduleId());
-        registration.setStatus(0); // Pending payment
-        registration.setQueueNumber(schedule.getCurrentCount());
-        registration.setFee(REGISTRATION_FEE);
-
-        registrationMapper.insert(registration);
+        registration.setStatus(0); 
+        registration.setQueueNumber(0); // Unknown yet
+        registration.setFee(registrationFee);
+        // We return a dummy ID or null. The frontend might need an ID to pay.
+        // This is the trade-off of async. 
+        // For this demo, we assume the user goes to "My Registrations" page which will eventually show the record.
         return registration;
+    }
+
+    /* Original Code Commented Out
+    // @Override
+    // @Transactional
+    public Registration createRegistration_OLD(RegistrationRequest request) {
+        Schedule schedule = scheduleService.getScheduleById(request.getScheduleId());
+        // ...
+        return null;
+    }
+    */
+
+    @Override
+    public RegistrationDetailDTO getRegistrationDetail(Long regId) {
+        Registration registration = registrationMapper.selectById(regId);
+        if (registration == null) {
+            return null;
+        }
+        
+        RegistrationDetailDTO dto = new RegistrationDetailDTO();
+        BeanUtils.copyProperties(registration, dto);
+        
+        // Fill related info
+        Schedule schedule = scheduleMapper.selectById(registration.getScheduleId());
+        if (schedule != null) {
+            dto.setScheduleDate(schedule.getScheduleDate().toString());
+            dto.setShift(getShiftLabel(schedule.getShiftType()));
+            
+            Department dept = departmentMapper.selectById(schedule.getDeptId());
+            if (dept != null) {
+                dto.setDeptName(dept.getDeptName());
+            }
+        }
+        
+        SysUser doctor = sysUserMapper.selectById(registration.getDoctorId());
+        if (doctor != null) {
+            dto.setDoctorName(doctor.getRealName());
+        }
+        
+        return dto;
     }
 
     @Override

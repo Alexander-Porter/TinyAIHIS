@@ -6,6 +6,8 @@ import com.tinyhis.entity.*;
 import com.tinyhis.mapper.*;
 import com.tinyhis.service.QueueService;
 import lombok.RequiredArgsConstructor;
+
+
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 
@@ -16,8 +18,8 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.stream.Collectors;
 
 /**
- * Queue Service Implementation
- * Uses in-memory queue (in production, use Redis)
+ * 候诊队列服务实现
+ * 当前实现使用内存队列（横向扩展场景建议改用 Redis 或消息中间件以支持多实例共享）。
  */
 @Service
 @RequiredArgsConstructor
@@ -119,8 +121,12 @@ public class QueueServiceImpl implements QueueService {
                 // 获取诊室信息
                 Registration reg = current;
                 Schedule schedule = scheduleMapper.selectById(reg.getScheduleId());
+                System.out.println("Schedule fetched for current patient: " + schedule);
+
+
                 if (schedule != null && schedule.getRoomId() != null) {
                     ConsultingRoom room = consultingRoomMapper.selectById(schedule.getRoomId());
+                    System.out.println("Consulting room fetched: " + room);
                     if (room != null) {
                         currentPatient.setRoomNumber(room.getRoomName());
                     } else {

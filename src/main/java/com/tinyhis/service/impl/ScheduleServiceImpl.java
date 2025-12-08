@@ -11,9 +11,11 @@ import com.tinyhis.mapper.DepartmentMapper;
 import com.tinyhis.mapper.ScheduleMapper;
 import com.tinyhis.mapper.SysUserMapper;
 import com.tinyhis.service.ScheduleService;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
@@ -24,11 +26,10 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
- * Schedule Service Implementation
- * 
- * Implements flash sale protection using MyBatis-Plus optimistic locking.
- * When multiple users attempt to book the same appointment slot simultaneously,
- * only one will succeed while others receive "号源不足" error.
+ * 排班服务实现
+ *
+ * 使用 MyBatis-Plus 的乐观锁来防止并发超卖（类似秒杀场景）。当多个用户同时尝试预订同一号源时，
+ * 仅有一人能够成功，其它用户会收到“号源不足”的提示。
  */
 @Slf4j
 @Service
@@ -39,9 +40,19 @@ public class ScheduleServiceImpl implements ScheduleService {
     private final ScheduleMapper scheduleMapper;
     private final SysUserMapper sysUserMapper;
     private final ConsultingRoomMapper consultingRoomMapper;
+    private final StringRedisTemplate redisTemplate;
 
-    private static final BigDecimal DEFAULT_FEE = new BigDecimal("50.00");
-    private static final int MAX_RETRY_TIMES = 3;
+    @Value("${app.registration.fee:50.00}")
+    private BigDecimal defaultFee;
+
+    @Value("${app.schedule.max-retry-times:50}")
+    private int maxRetryTimes;
+
+    @Value("${app.redis.quota-prefix:schedule:quota:}")
+    private String quotaPrefix;
+
+    @Value("${app.redis.user-prefix:schedule:users:}")
+    private String userPrefix;
 
     @Override
     public List<Department> getAllDepartments() {
@@ -106,7 +117,7 @@ public class ScheduleServiceImpl implements ScheduleService {
             dto.setMaxQuota(s.getMaxQuota());
             dto.setCurrentCount(s.getCurrentCount());
             dto.setQuotaLeft(s.getMaxQuota() - s.getCurrentCount());
-            dto.setFee(DEFAULT_FEE);
+            dto.setFee(defaultFee);
             dto.setDeptId(deptId);
             dto.setDeptName(dept != null ? dept.getDeptName() : null);
             
@@ -161,6 +172,16 @@ public class ScheduleServiceImpl implements ScheduleService {
         } else {
             scheduleMapper.updateById(schedule);
         }
+
+        // 同步更新 Redis 号源缓存：管理员调整 maxQuota 后，刷新剩余可挂号量
+        if (schedule.getScheduleId() != null) {
+            String quotaKey = quotaPrefix + schedule.getScheduleId();
+            String userKey = userPrefix + schedule.getScheduleId();
+            int available = Math.max(0, (schedule.getMaxQuota() == null ? 0 : schedule.getMaxQuota())
+                    - (schedule.getCurrentCount() == null ? 0 : schedule.getCurrentCount()));
+            redisTemplate.opsForValue().set(quotaKey, String.valueOf(available));
+            // 保留已挂用户集合，避免重复挂号逻辑失效；如需清空，可在此处选择删除 userKey
+        }
         return schedule;
     }
 
@@ -179,7 +200,7 @@ public class ScheduleServiceImpl implements ScheduleService {
     @Override
     @Transactional
     public boolean incrementCount(Long scheduleId) {
-        for (int i = 0; i < MAX_RETRY_TIMES; i++) {
+        for (int i = 0; i < maxRetryTimes; i++) {
             Schedule schedule = scheduleMapper.selectById(scheduleId);
             if (schedule == null) {
                 log.warn("Schedule not found: {}", scheduleId);
@@ -206,9 +227,16 @@ public class ScheduleServiceImpl implements ScheduleService {
             
             // Version conflict, retry
             log.debug("Optimistic lock conflict for schedule {}, retry {}", scheduleId, i + 1);
+            try {
+                // Random backoff to reduce collision
+                Thread.sleep(java.util.concurrent.ThreadLocalRandom.current().nextInt(5, 20));
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return false;
+            }
         }
         
-        log.warn("Failed to book schedule {} after {} retries", scheduleId, MAX_RETRY_TIMES);
+        log.warn("Failed to book schedule {} after {} retries", scheduleId, maxRetryTimes);
         return false;
     }
     
@@ -219,7 +247,7 @@ public class ScheduleServiceImpl implements ScheduleService {
     @Override
     @Transactional
     public boolean decrementCount(Long scheduleId) {
-        for (int i = 0; i < MAX_RETRY_TIMES; i++) {
+        for (int i = 0; i < maxRetryTimes; i++) {
             Schedule schedule = scheduleMapper.selectById(scheduleId);
             if (schedule == null || schedule.getCurrentCount() <= 0) {
                 return false;

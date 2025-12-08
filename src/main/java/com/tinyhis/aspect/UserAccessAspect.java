@@ -27,7 +27,7 @@ public class UserAccessAspect {
 
         UserPrincipal principal = (UserPrincipal) authentication.getPrincipal();
         
-        // If user is not a patient (e.g. doctor, admin), allow access
+        // 如果当前用户不是患者（例如医生、管理员），则允许访问
         if (!"PATIENT".equals(principal.getRole()) && !"ROLE_PATIENT".equals(principal.getRole())) {
             return;
         }
@@ -49,7 +49,7 @@ public class UserAccessAspect {
                     try {
                         requestedId = Long.parseLong((String) args[i]);
                     } catch (NumberFormatException e) {
-                        // ignore
+                        // 忽略无法转换的参数值，并继续寻找
                     }
                 }
                 break;
@@ -57,8 +57,7 @@ public class UserAccessAspect {
         }
 
         if (requestedId == null) {
-            // If we can't find the ID, maybe we should block or allow? 
-            // Safest is to block if we expected to check it.
+            // 无法找到需要检查的 ID 参数时，出于安全考虑拒绝访问
             throw new AccessDeniedException("Cannot verify user access: ID parameter not found");
         }
 

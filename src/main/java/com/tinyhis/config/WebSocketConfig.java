@@ -15,7 +15,7 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     @Override
     public void configureMessageBroker(MessageBrokerRegistry registry) {
-        // Enable simple in-memory message broker
+        // 启用内存中的简单消息代理
         registry.enableSimpleBroker("/topic");
         // Set application destination prefix
         registry.setApplicationDestinationPrefixes("/app");
@@ -23,7 +23,7 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
-        // Register WebSocket endpoint
+        // 注册 WebSocket 端点
         registry.addEndpoint("/ws")
                 .setAllowedOriginPatterns("*")
                 .withSockJS();

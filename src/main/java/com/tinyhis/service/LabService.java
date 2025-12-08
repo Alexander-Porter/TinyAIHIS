@@ -1,6 +1,7 @@
 package com.tinyhis.service;
 
 import com.tinyhis.dto.LabResultRequest;
+import com.tinyhis.dto.LabOrderView;
 import com.tinyhis.entity.LabOrder;
 
 import java.util.List;
@@ -13,7 +14,7 @@ public interface LabService {
     /**
      * Get pending lab orders
      */
-    List<LabOrder> getPendingOrders();
+    List<LabOrderView> getOrders(String status);
 
     /**
      * Get lab order by ID

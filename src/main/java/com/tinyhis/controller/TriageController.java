@@ -11,6 +11,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+import org.springframework.beans.factory.annotation.Value;
 
 import java.util.List;
 import java.util.Map;
@@ -24,6 +25,9 @@ import java.util.Map;
 public class TriageController {
 
     private final TriageService triageService;
+
+    @Value("${triage.sse.timeout-ms:180000}")
+    private long sseTimeoutMs;
 
     /**
      * AI-based triage recommendation
@@ -39,7 +43,7 @@ public class TriageController {
      */
     @PostMapping(value = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter streamTriage(@RequestBody TriageRequest request) {
-        SseEmitter emitter = new SseEmitter(180000L); // 3 mins timeout
+        SseEmitter emitter = new SseEmitter(sseTimeoutMs); // sse timeout
         triageService.streamTriage(request, emitter);
         return emitter;
     }
@@ -49,7 +53,7 @@ public class TriageController {
      */
     @PostMapping(value = "/doctor-assist", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter streamDoctorAssist(@RequestBody Map<String, Object> request) {
-        SseEmitter emitter = new SseEmitter(180000L); // 3 mins timeout
+        SseEmitter emitter = new SseEmitter(sseTimeoutMs); // sse timeout
         
         String content = (String) request.get("content");
         String conversationId = (String) request.get("conversationId");

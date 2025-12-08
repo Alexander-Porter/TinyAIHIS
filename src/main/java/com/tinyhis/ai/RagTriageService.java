@@ -28,7 +28,9 @@ import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
 /**
- * RAG-based Triage Service using Spring AI
+ * 基于 RAG 的分诊服务，使用直接的 HTTP 客户端与 SiliconFlow/DeepSeek 进行交互。
+ * 使用手动 SSE 解析以支持 reasoning_content、tool_calls 及工具调用/结果的显式处理，
+ * 从而实现可控且可靠的 Function Call RAG 流程。
  */
 @Slf4j
 @Service
@@ -43,6 +45,7 @@ public class RagTriageService {
     private final PrescriptionMapper prescriptionMapper;
     private final LabOrderMapper labOrderMapper;
     private final DrugDictMapper drugDictMapper;
+    private final DepartmentMapper departmentMapper;
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
     private final HttpClient httpClient = HttpClient.newBuilder()
@@ -60,6 +63,10 @@ public class RagTriageService {
 
     @Value("${siliconflow.model:deepseek-ai/DeepSeek-V3.2}")
     private String siliconflowModel;
+    @Value("${siliconflow.api-url:https://api.siliconflow.cn/v1}")
+    private String siliconflowApiUrl;
+    @Value("${app.redis.chat-history-prefix:chat:history:}")
+    private String chatHistoryPrefix;
 
     /**
      * Stream triage recommendation with SSE
@@ -95,12 +102,12 @@ public class RagTriageService {
     public void streamDoctorAssist(Long patientId, String userQuery, String conversationId, SseEmitter emitter) {
         CompletableFuture.runAsync(() -> {
             try {
-                // Generate conversationId if missing
+                // 如果 conversationId 为空，则生成一个新的会话 ID
                 String chatId = (conversationId == null || conversationId.isEmpty())
                         ? UUID.randomUUID().toString()
                         : conversationId;
 
-                // Send chatId back to frontend
+                // 将 chatId 返回给前端以保持会话一致
                 sendEvent(emitter, "session", chatId);
                 sendEvent(emitter, "status", "正在准备患者信息...");
 
@@ -163,8 +170,7 @@ public class RagTriageService {
                 4. 当你确定患者应该去哪个科室时，请务必调用 recommend_department 函数，并告知患者前往该科室。
 
                 输出包含：
-                - 思考过程：简要分析患者症状与科室的对应关系。
-                - 回复：给患者的温馨建议。
+                    给患者的温馨建议。
                 """;
     }
 
@@ -236,8 +242,8 @@ public class RagTriageService {
             System.out.println("SiliconFlow Chat Request: " + objectMapper.writeValueAsString(body));
             String json = objectMapper.writeValueAsString(body);
 
-            HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create("https://api.siliconflow.cn/v1/chat/completions"))
+                HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(siliconflowApiUrl + "/chat/completions"))
                     .timeout(Duration.ofSeconds(60))
                     .header("Content-Type", "application/json")
                     .header("Authorization", "Bearer " + siliconflowApiKey)
@@ -291,8 +297,7 @@ public class RagTriageService {
                             int index = call.path("index").asInt(-1);
                             String idField = call.path("id").asText("");
 
-                            // Use index as primary accumulator key; id is captured but not used for
-                            // grouping
+                            // 使用索引作为主聚合键；id 被捕获但不用于分组（避免大量并发时键冲突）
                             String key;
                             if (index >= 0) {
                                 key = "idx-" + index;
@@ -393,18 +398,14 @@ public class RagTriageService {
 
         if ("recommend_department".equals(toolName)) {
             String deptName = args.getOrDefault("departmentName", "").toString();
-            // Mock department lookup - in real app, query DB
-            Map<String, Object> deptInfo = new HashMap<>();
-            deptInfo.put("name", deptName);
-            deptInfo.put("location", "门诊楼2层"); // Mock location
-            deptInfo.put("id", Math.abs(deptName.hashCode())); // Mock ID
+            Map<String, Object> deptInfo = buildDepartmentInfo(deptName);
 
             toolCall.put("department", deptInfo);
             sendEvent(emitter, "tool_call", safeJson(toolCall));
 
             content = safeJson(deptInfo);
         } else {
-            // Default to search_knowledge_base
+            // 默认为 search_knowledge_base
             String query = args.getOrDefault("query", "").toString();
             int limit = parseTopK(args.get("top_k"));
             if (limit <= 0)
@@ -422,7 +423,7 @@ public class RagTriageService {
                         })
                         .toList();
                 toolCall.put("sources", sources);
-                toolCall.put("count", docs.size()); // Only send count to frontend
+                toolCall.put("count", docs.size()); // 只向前端发送数量以避免泄露过多信息
                 sendEvent(emitter, "tool_call", safeJson(toolCall));
             }
             content = buildToolResultContent(query, docs);
@@ -437,6 +438,37 @@ public class RagTriageService {
         return toolMessage;
     }
 
+    private Map<String, Object> buildDepartmentInfo(String deptName) {
+        Map<String, Object> info = new HashMap<>();
+        if (deptName == null || deptName.isBlank()) {
+            info.put("name", "未知科室");
+            return info;
+        }
+
+        LambdaQueryWrapper<Department> wrapper = new LambdaQueryWrapper<Department>()
+                .eq(Department::getStatus, 1)
+                .eq(Department::getDeptName, deptName)
+                .last("LIMIT 1");
+        Department department = departmentMapper.selectOne(wrapper);
+        if (department == null) {
+            department = departmentMapper.selectOne(
+                    new LambdaQueryWrapper<Department>()
+                            .eq(Department::getStatus, 1)
+                            .like(Department::getDeptName, deptName)
+                            .last("LIMIT 1"));
+        }
+
+        if (department != null) {
+            info.put("id", department.getDeptId());
+            info.put("name", department.getDeptName());
+            info.put("location", department.getLocation());
+            info.put("status", department.getStatus());
+        } else {
+            info.put("name", deptName);
+        }
+        return info;
+    }
+
     private Map<String, Object> parseArgs(String argsJson) {
         if (argsJson == null)
             return new HashMap<>();
@@ -445,13 +477,12 @@ public class RagTriageService {
         if (raw.isEmpty())
             return new HashMap<>();
 
-        // Handle simple numeric payloads like "3" meaning only top_k was provided
+        // 处理模型可能返回的简单数字负载，例如 "3" 表示只提供了 top_k 值
         if (raw.matches("^-?\\d+$")) {
             return Map.of("top_k", Integer.parseInt(raw));
         }
 
-        // Ensure arguments are a JSON object; if the model streamed partial braces, try
-        // to coerce
+        // 确保 arguments 是 JSON 对象；如果模型流式输出产生了不完整的花括号，尝试进行兼容性解析
         if (!raw.startsWith("{") && !raw.startsWith("[")) {
             // Sometimes OpenAI-style tools send a JSON string of object; try quoting and
             // parsing
@@ -719,7 +750,7 @@ public class RagTriageService {
     }
 
     private List<Map<String, Object>> loadChatHistory(String conversationId) {
-        List<String> historyJson = redisTemplate.opsForList().range("chat:history:" + conversationId, 0, -1);
+        List<String> historyJson = redisTemplate.opsForList().range(chatHistoryPrefix + conversationId, 0, -1);
         if (historyJson == null || historyJson.isEmpty())
             return new ArrayList<>();
 
@@ -745,11 +776,11 @@ public class RagTriageService {
             Map<String, String> userMsg = Map.of("role", "user", "content", userQuery);
             Map<String, String> aiMsg = Map.of("role", "assistant", "content", aiResponse);
 
-            redisTemplate.opsForList().rightPushAll("chat:history:" + conversationId,
+            redisTemplate.opsForList().rightPushAll(chatHistoryPrefix + conversationId,
                     objectMapper.writeValueAsString(userMsg),
                     objectMapper.writeValueAsString(aiMsg));
 
-            redisTemplate.expire("chat:history:" + conversationId, Duration.ofHours(24));
+            redisTemplate.expire(chatHistoryPrefix + conversationId, Duration.ofHours(24));
         } catch (Exception e) {
             log.error("Failed to save chat history", e);
         }

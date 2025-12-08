@@ -60,4 +60,9 @@ public interface RegistrationService {
      * Cancel registration
      */
     boolean cancelRegistration(Long regId);
+
+    /**
+     * Get registration detail
+     */
+    com.tinyhis.dto.RegistrationDetailDTO getRegistrationDetail(Long regId);
 }
