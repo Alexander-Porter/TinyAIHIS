@@ -55,6 +55,9 @@ services:
       dockerfile: Dockerfile
     container_name: tinyhis-backend
     restart: unless-stopped
+    dns:
+      - 114.114.114.114
+      - 8.8.8.8
     depends_on:
       mysql:
         condition: service_healthy

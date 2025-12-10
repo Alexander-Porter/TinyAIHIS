@@ -51,6 +51,7 @@ CREATE TABLE IF NOT EXISTS department (
 CREATE TABLE IF NOT EXISTS consulting_room (
     room_id BIGINT PRIMARY KEY AUTO_INCREMENT,
     room_name VARCHAR(100) NOT NULL COMMENT 'e.g. 1号诊室',
+    dept_ids VARCHAR(255) COMMENT 'JSON array of allowed department IDs',
     room_code VARCHAR(50) COMMENT 'Room code for display',
     location VARCHAR(255) COMMENT 'e.g. 门诊楼1楼A区',
     description TEXT,

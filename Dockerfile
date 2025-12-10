@@ -27,12 +27,13 @@ COPY --from=build /app/target/tinyhis-*.jar app.jar
 COPY docker/backend-entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
+
 # Create directories for knowledge base, vector index, and logs
 RUN mkdir -p /app/medical-knowledge /app/vector-index /app/logs /app/uploads && \
     chown -R tinyhis:tinyhis /app
 
 # Install tools for switching users and entrypoint handling
-RUN apk add --no-cache su-exec
+
 
 # Do not switch to non-root here; entrypoint will switch to tinyhis after chown
 

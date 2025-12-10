@@ -6,4 +6,4 @@ mkdir -p /app/uploads
 chown -R tinyhis:tinyhis /app/uploads || true
 
 # Start the app as tinyhis
-exec su-exec tinyhis java $JAVA_OPTS -jar app.jar
+exec java $JAVA_OPTS -jar app.jar
