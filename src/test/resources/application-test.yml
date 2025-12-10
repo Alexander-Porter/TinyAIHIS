@@ -1,44 +1,27 @@
-server:
-  port: 8080
-
 spring:
   datasource:
-    url: jdbc:h2:mem:tinyhis_test;DB_CLOSE_DELAY=-1;MODE=MYSQL
+    url: jdbc:h2:mem:tinyhis;DB_CLOSE_DELAY=-1;MODE=MySQL
     username: sa
     password: 
     driver-class-name: org.h2.Driver
-  h2:
-    console:
-      enabled: false
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
   sql:
     init:
       mode: always
       schema-locations: classpath:schema.sql
       data-locations: classpath:data.sql
-  autoconfigure:
-    exclude:
-      - org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration
 
+# Disable real Redis by pointing to nothing or we will mock the template
+# But for @SpringBootTest without a real Redis, it might fail to start if it tries to connect.
+# We will use @MockBean for RedisTemplate in the test class.
 
-mybatis-plus:
-  mapper-locations: classpath:/mapper/**/*.xml
-  type-aliases-package: com.tinyhis.entity
-  configuration:
-    map-underscore-to-camel-case: true
-
-jwt:
-  secret: ${JWT_SECRET:}
-  expiration: 86400000
-
-hospital:
-  latitude: 39.9042
-  longitude: 116.4074
-  check-in-radius: 500
+medical:
+  knowledge:
+    path: target/medical-knowledge/
+    vector-path: target/vector-index/
 
 triage:
   rag:
     enabled: false
-
-logging:
-  level:
-    com.tinyhis: DEBUG

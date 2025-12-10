@@ -1,4 +1,4 @@
--- TinyHIS Database Schema
+-- TinyHIS Database Schema (Synced with docker/init.sql)
 
 -- System User Table (Doctor, Chief, Admin, Pharmacy, Lab)
 CREATE TABLE IF NOT EXISTS sys_user (
@@ -39,6 +39,19 @@ CREATE TABLE IF NOT EXISTS department (
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 
+-- Consulting Room Table (诊室表)
+CREATE TABLE IF NOT EXISTS consulting_room (
+    room_id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    room_name VARCHAR(100) NOT NULL COMMENT 'e.g. 1号诊室',
+    dept_ids VARCHAR(255) COMMENT 'JSON array of allowed department IDs',
+    room_code VARCHAR(50) COMMENT 'Room code for display',
+    location VARCHAR(255) COMMENT 'e.g. 门诊楼1楼A区',
+    description TEXT,
+    status INT DEFAULT 1 COMMENT '0-disabled, 1-enabled',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
 -- Drug Dictionary Table
 CREATE TABLE IF NOT EXISTS drug_dict (
     drug_id BIGINT PRIMARY KEY AUTO_INCREMENT,
@@ -53,16 +66,45 @@ CREATE TABLE IF NOT EXISTS drug_dict (
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 
+-- Check Item Table (检查项目)
+CREATE TABLE IF NOT EXISTS check_item (
+    item_id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    item_name VARCHAR(200) NOT NULL,
+    item_code VARCHAR(50),
+    price DECIMAL(10,2) NOT NULL,
+    category VARCHAR(100),
+    description TEXT,
+    status INT DEFAULT 1,
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
 -- Doctor Schedule Table (with optimistic locking for flash sale protection)
 CREATE TABLE IF NOT EXISTS schedule (
     schedule_id BIGINT PRIMARY KEY AUTO_INCREMENT,
     doctor_id BIGINT NOT NULL,
+    dept_id BIGINT NOT NULL COMMENT 'Department ID',
+    room_id BIGINT COMMENT 'Consulting room ID',
     schedule_date DATE NOT NULL,
-    shift_type VARCHAR(10) NOT NULL COMMENT 'AM or PM',
+    shift_type VARCHAR(10) NOT NULL COMMENT 'AM, PM or ER',
     max_quota INT DEFAULT 30 COMMENT 'Maximum appointments allowed for this shift',
     current_count INT DEFAULT 0 COMMENT 'Current booked appointment count',
     status INT DEFAULT 1,
     version INT DEFAULT 0 COMMENT 'Optimistic lock version for preventing overselling',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
+-- Schedule Template Table (weekly recurring patterns)
+CREATE TABLE IF NOT EXISTS schedule_template (
+    template_id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    dept_id BIGINT NOT NULL COMMENT 'Department ID',
+    doctor_id BIGINT NOT NULL COMMENT 'Doctor ID',
+    room_id BIGINT COMMENT 'Default consulting room ID',
+    day_of_week INT NOT NULL COMMENT '0=Monday, 1=Tuesday, ..., 6=Sunday',
+    shift_type VARCHAR(10) NOT NULL COMMENT 'AM, PM or ER',
+    max_quota INT DEFAULT 30 COMMENT 'Maximum appointments per shift',
+    status INT DEFAULT 1 COMMENT '1=active, 0=inactive',
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );

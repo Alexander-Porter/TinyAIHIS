@@ -40,11 +40,11 @@ INSERT INTO patient_info (patient_id, name, id_card, phone, password, gender, ag
 (1, '测试患者', '110101199001011234', '13800138000', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iKTVKIUi', 1, 34);
 
 -- Sample Schedules
-INSERT INTO schedule (schedule_id, doctor_id, schedule_date, shift_type, max_quota, current_count) VALUES
-(1, 2, CURRENT_DATE, 'AM', 30, 0),
-(2, 2, CURRENT_DATE, 'PM', 30, 0),
-(3, 3, CURRENT_DATE, 'AM', 20, 0),
-(4, 3, CURRENT_DATE, 'PM', 20, 0);
+INSERT INTO schedule (schedule_id, doctor_id, dept_id, schedule_date, shift_type, max_quota, current_count) VALUES
+(1, 2, 1, CURRENT_DATE, 'AM', 30, 0),
+(2, 2, 1, CURRENT_DATE, 'PM', 30, 0),
+(3, 3, 3, CURRENT_DATE, 'AM', 20, 0),
+(4, 3, 3, CURRENT_DATE, 'PM', 20, 0);
 
 -- EMR Templates
 INSERT INTO emr_template (tpl_id, dept_id, creator_id, name, content, type) VALUES
