@@ -10,7 +10,9 @@
               <a-tag color="blue">{{ patients.length }}</a-tag>
             </div>
             <a-button type="primary" size="small" @click="callNext" :loading="calling">
-              <template #icon><BellOutlined /></template> 叫号
+              <template #icon>
+                <BellOutlined />
+              </template> 叫号
             </a-button>
           </div>
           <!-- 患者状态筛选 -->
@@ -26,17 +28,12 @@
             <div class="patient-empty" v-if="filteredPatients.length === 0">
               暂无患者
             </div>
-            <div 
-              class="patient-item" 
-              v-for="p in filteredPatients" 
-              :key="p.regId"
-              :class="{ 
-                current: currentPatient?.regId === p.regId,
-                'in-consultation': p.status === 3,
-                'waiting': p.status === 1 || p.status === 2,
-                'completed': p.status === 4
-              }"
-              @click="selectPatient(p)">
+            <div class="patient-item" v-for="p in filteredPatients" :key="p.regId" :class="{
+              current: currentPatient?.regId === p.regId,
+              'in-consultation': p.status === 3,
+              'waiting': p.status === 1 || p.status === 2,
+              'completed': p.status === 4
+            }" @click="selectPatient(p)">
               <div class="patient-number">{{ p.queueNumber || '-' }}</div>
               <div class="patient-info">
                 <div class="name">{{ p.patientName || '患者#' + p.patientId }}</div>
@@ -53,11 +50,14 @@
                   检查完成
                 </a-tag>
               </div>
+              <div class="patient-actions" v-if="(p.status === 1 || p.status === 2 || p.status === 6)">
+                <a-button type="link" size="small" @click.stop="callSpecificPatient(p)">叫号</a-button>
+              </div>
             </div>
           </div>
         </div>
       </div>
-      
+
       <!-- Middle: Main Workspace -->
       <div class="middle-panel">
         <template v-if="currentPatient">
@@ -71,13 +71,20 @@
             </div>
             <div class="actions">
               <a-button v-if="currentPatient.status === 3" size="small" @click="pauseCurrentPatient">
-                <template #icon><PauseOutlined /></template> 暂停
+                <template #icon>
+                  <PauseOutlined />
+                </template> 暂停
               </a-button>
-              <a-button v-if="currentPatient.status === 2" type="primary" size="small" @click="resumeCurrentPatient">
-                <template #icon><PlayCircleOutlined /></template> 继续
+              <a-button v-if="currentPatient.status === 2 || currentPatient.status === 6" type="primary" size="small"
+                @click="callSpecificPatient(currentPatient)">
+                <template #icon>
+                  <PlayCircleOutlined />
+                </template> 叫号
               </a-button>
               <a-button type="primary" size="small" @click="completeVisit" :disabled="currentPatient.status !== 3">
-                <template #icon><CheckOutlined /></template> 完成就诊
+                <template #icon>
+                  <CheckOutlined />
+                </template> 完成就诊
               </a-button>
             </div>
           </div>
@@ -88,17 +95,28 @@
               <!-- Tab栏右侧按钮 -->
               <template #rightExtra>
                 <div class="tab-extra-buttons">
-                  <a-button v-if="mainTab === 'emr'" type="primary" size="small" @click="saveEmrFromTemplate" :loading="saving">
-                    <template #icon><SaveOutlined /></template> 保存病历
+                  <a-button v-if="mainTab === 'emr'" type="primary" size="small" @click="saveEmrFromTemplate"
+                    :loading="saving">
+                    <template #icon>
+                      <SaveOutlined />
+                    </template> 保存病历
                   </a-button>
                   <a-button v-if="mainTab === 'emr'" size="small" @click="printEmr">
-                    <template #icon><PrinterOutlined /></template> 打印病历
+                    <template #icon>
+                      <PrinterOutlined />
+                    </template> 打印病历
                   </a-button>
-                  <a-button v-if="mainTab === 'lab'" size="small" @click="printLabOrders" :disabled="labOrders.length === 0">
-                    <template #icon><PrinterOutlined /></template> 打印申请单
+                  <a-button v-if="mainTab === 'lab'" size="small" @click="printLabOrders"
+                    :disabled="labOrders.length === 0">
+                    <template #icon>
+                      <PrinterOutlined />
+                    </template> 打印申请单
                   </a-button>
-                  <a-button v-if="mainTab === 'prescription'" size="small" @click="printPrescription" :disabled="prescriptions.length === 0">
-                    <template #icon><PrinterOutlined /></template> 打印处方笺
+                  <a-button v-if="mainTab === 'prescription'" size="small" @click="printPrescription"
+                    :disabled="prescriptions.length === 0">
+                    <template #icon>
+                      <PrinterOutlined />
+                    </template> 打印处方笺
                   </a-button>
                 </div>
               </template>
@@ -107,16 +125,9 @@
                 <div class="tab-content emr-tab-content">
                   <!-- 电子病历编辑器 -->
                   <div class="emr-editor-wrapper">
-                    <EmrEditor 
-                      ref="emrEditorRef"
-                      v-model="emrTemplateData"
-                      :patientInfo="currentPatientInfo"
-                      :hospitalName="'武汉大学医院'"
-                      :labOrders="labOrders"
-                      :prescriptions="prescriptions"
-                      :drugs="drugs"
-                      @print="handleEmrPrint"
-                    />
+                    <EmrEditor ref="emrEditorRef" v-model="emrTemplateData" :patientInfo="currentPatientInfo"
+                      :hospitalName="'武汉大学医院'" :labOrders="labOrders" :prescriptions="prescriptions" :drugs="drugs"
+                      @print="handleEmrPrint" />
                   </div>
                 </div>
               </a-tab-pane>
@@ -135,31 +146,18 @@
                     <div class="lab-item" v-for="(lab, idx) in labOrders" :key="idx">
                       <div class="lab-row">
                         <div class="lab-info">
-                          <a-auto-complete
-                            v-model:value="lab.itemName"
-                            :options="commonLabItems"
-                            placeholder="检查项目名称"
-                            style="width: 200px"
-                            @select="(val) => onLabSelect(val, lab)"
-                            :disabled="!!lab.orderId"
-                          />
+                          <a-auto-complete v-model:value="lab.itemName" :options="commonLabItems" placeholder="检查项目名称"
+                            style="width: 200px" @select="(val) => onLabSelect(val, lab)" :disabled="!!lab.orderId" />
                           <span class="price">¥{{ lab.price }}</span>
                         </div>
                         <div class="lab-status">
                           <a-tag :color="getLabStatusColor(lab.status)">{{ getLabStatusText(lab.status) }}</a-tag>
-                          <a-button 
-                            v-if="lab.status === 2" 
-                            type="link" 
-                            size="small" 
-                            @click="viewReport(lab)"
-                          >查看报告</a-button>
-                          <a-button 
-                            v-if="!lab.orderId" 
-                            type="text" 
-                            danger 
-                            @click="labOrders.splice(idx, 1)"
-                          >
-                            <template #icon><DeleteOutlined /></template>
+                          <a-button v-if="lab.status === 2" type="link" size="small"
+                            @click="viewReport(lab)">查看报告</a-button>
+                          <a-button v-if="!lab.orderId" type="text" danger @click="labOrders.splice(idx, 1)">
+                            <template #icon>
+                              <DeleteOutlined />
+                            </template>
                           </a-button>
                         </div>
                       </div>
@@ -182,35 +180,29 @@
                   </div>
                   <div class="prescription-list">
                     <div v-if="prescriptions.length === 0" class="empty-tip">暂无处方</div>
-                    <a-table 
-                      :dataSource="prescriptions" 
-                      :columns="prescriptionColumns" 
-                      size="small" 
-                      :pagination="false"
-                      rowKey="idx"
-                    >
+                    <a-table :dataSource="prescriptions" :columns="prescriptionColumns" size="small" :pagination="false"
+                      rowKey="idx">
                       <template #bodyCell="{ column, record, index }">
                         <template v-if="column.key === 'drug'">
-                          <a-select 
-                            v-model:value="record.drugId" 
-                            placeholder="选择药品" 
-                            show-search 
-                            option-filter-prop="label" 
-                            style="width: 100%"
-                            :disabled="!!record.presId"
-                          >
-                            <a-select-option v-for="d in drugs" :key="d.drugId" :value="d.drugId" :label="d.name">{{ d.name }}</a-select-option>
+                          <a-select v-model:value="record.drugId" placeholder="选择药品" show-search
+                            option-filter-prop="label" style="width: 100%" :disabled="!!record.presId">
+                            <a-select-option v-for="d in drugs" :key="d.drugId" :value="d.drugId" :label="d.name">{{
+                              d.name }}</a-select-option>
                           </a-select>
                         </template>
                         <template v-if="column.key === 'quantity'">
-                          <a-input-number v-model:value="record.quantity" :min="1" size="small" :disabled="!!record.presId" />
+                          <a-input-number v-model:value="record.quantity" :min="1" size="small"
+                            :disabled="!!record.presId" />
                         </template>
                         <template v-if="column.key === 'usage'">
                           <a-input v-model:value="record.usageInstruction" size="small" :disabled="!!record.presId" />
                         </template>
                         <template v-if="column.key === 'action'">
-                          <a-button v-if="!record.presId" type="text" danger size="small" @click="prescriptions.splice(index, 1)">
-                            <template #icon><DeleteOutlined /></template>
+                          <a-button v-if="!record.presId" type="text" danger size="small"
+                            @click="prescriptions.splice(index, 1)">
+                            <template #icon>
+                              <DeleteOutlined />
+                            </template>
                           </a-button>
                         </template>
                       </template>
@@ -291,12 +283,9 @@
         <div class="panel-card right-tools-panel">
           <a-tabs type="card" size="small" class="right-tabs">
             <a-tab-pane key="ai" tab="AI助手">
-              <DoctorAiChat 
-                :initialQuery="aiInitialQuery" 
-                :patientId="currentPatient?.patientId"
-                @apply="applyAiSuggestion" 
-                style="height: calc(100vh - 180px); display: flex; flex-direction: column;"
-              />
+              <DoctorAiChat :initialQuery="aiInitialQuery" :patientId="currentPatient?.patientId"
+                @apply="applyAiSuggestion"
+                style="height: calc(100vh - 180px); display: flex; flex-direction: column;" />
             </a-tab-pane>
             <a-tab-pane key="tpl" tab="常用模板">
               <div class="template-list">
@@ -331,23 +320,16 @@
         </div>
       </template>
     </a-modal>
-    
+
     <!-- Knowledge Search Popup -->
-    <KnowledgeSearchPopup 
-      v-model="knowledgeSearchVisible"
-      :initialQuery="knowledgeSearchQuery"
-      @insert="handleKnowledgeInsert"
-    />
-    
+    <KnowledgeSearchPopup v-model="knowledgeSearchVisible" :initialQuery="knowledgeSearchQuery"
+      @insert="handleKnowledgeInsert" />
+
     <!-- Context Menu for Text Selection -->
     <teleport to="body">
-      <div
-        v-if="contextMenuVisible"
-        class="context-menu"
-        :style="{ top: contextMenuY + 'px', left: contextMenuX + 'px' }"
-        ref="contextMenuRef"
-        @mousedown.stop="handleContextMenuMouseDown"
-      >
+      <div v-if="contextMenuVisible" class="context-menu"
+        :style="{ top: contextMenuY + 'px', left: contextMenuX + 'px' }" ref="contextMenuRef"
+        @mousedown.stop="handleContextMenuMouseDown">
         <div class="context-menu-item" @click="searchSelectedText">
           <SearchOutlined /> 搜索知识库
         </div>
@@ -443,18 +425,18 @@ const filteredPatients = computed(() => {
 })
 
 const getStatusColor = (status) => {
-  const colors = { 0: 'default', 1: 'orange', 2: 'blue', 3: 'processing', 4: 'success', 5: 'default' }
+  const colors = { 0: 'default', 1: 'orange', 2: 'blue', 3: 'processing', 4: 'success', 5: 'default', 6: 'purple' }
   return colors[status] || 'default'
 }
 
 const getStatusText = (parent) => {
   const status = parent.status
-  const isER=isEmergency(parent)
+  const isER = isEmergency(parent)
   if (isER) {
-    const textsER = { 0: '待缴费(急诊)', 1: '候诊中(急诊)', 2: '候诊中(急诊)', 3: '就诊中(急诊)', 4: '已完成(急诊)', 5: '已取消(急诊)' }
+    const textsER = { 0: '待缴费(急诊)', 1: '候诊中(急诊)', 2: '候诊中(急诊)', 3: '就诊中(急诊)', 4: '已完成(急诊)', 5: '已取消(急诊)', 6: '已暂停(急诊)' }
     return textsER[status] || '未知(急诊)'
   }
-  const texts = { 0: '待缴费', 1: '待签到', 2: '候诊中', 3: '就诊中', 4: '已完成', 5: '已取消' }
+  const texts = { 0: '待缴费', 1: '待签到', 2: '候诊中', 3: '就诊中', 4: '已完成', 5: '已取消', 6: '已暂停' }
   return texts[status] || '未知'
 }
 
@@ -482,11 +464,11 @@ const openAiAssistant = () => {
   if (emrForm.symptom) query += `主诉：${emrForm.symptom}\n`
   if (emrForm.content) query += `现病史：${emrForm.content}\n`
   if (emrForm.diagnosis) query += `初步诊断：${emrForm.diagnosis}\n`
-  
+
   if (!query) {
     query = '患者刚入院，请协助问诊。'
   }
-  
+
   aiInitialQuery.value = query
   aiDrawerVisible.value = true
 }
@@ -560,7 +542,7 @@ onMounted(async () => {
     loadCheckItems()
   ])
   connectWebSocket()
-  
+
   // Show action when any text is selected
   document.addEventListener('selectionchange', handleSelectionChange)
   document.addEventListener('click', handleClickOutside)
@@ -570,7 +552,7 @@ onBeforeUnmount(() => {
   if (stompClient) {
     stompClient.deactivate()
   }
-  
+
   // Remove text selection listeners
   document.removeEventListener('selectionchange', handleSelectionChange)
   document.removeEventListener('click', handleClickOutside)
@@ -662,17 +644,17 @@ const loadHistory = async (patientId) => {
 const selectPatient = async (patient) => {
   currentPatient.value = patient
   mainTab.value = 'emr'
-  
+
   // Reset form
   Object.assign(emrForm, { symptom: '', diagnosis: '', content: '' })
   emrTemplateData.value = {}
-  
+
   // Load existing EMR data if any
   if (patient.medicalRecord) {
     emrForm.symptom = patient.medicalRecord.symptom || ''
     emrForm.diagnosis = patient.medicalRecord.diagnosis || ''
     emrForm.content = patient.medicalRecord.content || ''
-    
+
     // Parse content back to template data
     const parsed = parseEmrContent(patient.medicalRecord.content)
     emrTemplateData.value = {
@@ -684,7 +666,7 @@ const selectPatient = async (patient) => {
       treatment: parsed.treatment || ''
     }
   }
-  
+
   // Load prescriptions and lab orders
   prescriptions.value = (patient.prescriptions || []).map(p => ({
     presId: p.presId,
@@ -692,7 +674,7 @@ const selectPatient = async (patient) => {
     quantity: p.quantity,
     usageInstruction: p.usageInstruction
   }))
-  
+
   labOrders.value = (patient.labOrders || []).map(l => ({
     orderId: l.orderId,
     itemName: l.itemName,
@@ -701,7 +683,7 @@ const selectPatient = async (patient) => {
     resultText: l.resultText,
     resultTime: l.resultTime
   }))
-  
+
   // Load history in background
   loadHistory(patient.patientId)
 }
@@ -721,51 +703,51 @@ const insertReportSelection = () => {
     message.warning('请先在报告中选中要插入的内容')
     return
   }
-  
+
   const range = selection.getRangeAt(0)
   const fragment = range.cloneContents()
-  
+
   // Parse fragment to text
   const text = parseHtmlToText(fragment).trim()
-  
+
   if (!text) {
     message.warning('选中的内容为空')
     return
   }
-  
+
   // Insert into physical exam
   if (!emrTemplateData.value.physicalExam) {
     emrTemplateData.value.physicalExam = ''
   }
-  
+
   if (emrTemplateData.value.physicalExam) {
     emrTemplateData.value.physicalExam += '\n' + text
   } else {
     emrTemplateData.value.physicalExam = text
   }
-  
+
   message.success('已插入到查体')
 }
 
 const parseHtmlToText = (node) => {
   let text = ''
-  
+
   if (node.nodeType === Node.TEXT_NODE) {
     return node.textContent
   }
-  
+
   if (node.nodeType === Node.ELEMENT_NODE) {
     const tagName = node.tagName.toLowerCase()
     const isBlock = ['div', 'p', 'tr', 'h1', 'h2', 'h3', 'li', 'br'].includes(tagName)
-    
+
     if (tagName === 'br') {
       return '\n'
     }
-    
+
     for (let child of node.childNodes) {
       text += parseHtmlToText(child)
     }
-    
+
     if (tagName === 'tr') {
       text += '\n'
     } else if (tagName === 'td' || tagName === 'th') {
@@ -774,11 +756,11 @@ const parseHtmlToText = (node) => {
       text += '\n'
     }
   } else if (node.nodeType === Node.DOCUMENT_FRAGMENT_NODE) {
-     for (let child of node.childNodes) {
+    for (let child of node.childNodes) {
       text += parseHtmlToText(child)
     }
   }
-  
+
   // Clean up multiple newlines
   return text.replace(/\n\s*\n/g, '\n')
 }
@@ -836,7 +818,7 @@ const resumeCurrentPatient = async () => {
     await doctorApi.resume(currentPatient.value.regId)
     message.success('已恢复接诊')
     currentPatient.value.status = 3
-    
+
     // Refresh patient detail to get latest lab results
     const updated = await doctorApi.getVisitDetail(currentPatient.value.regId)
     selectPatient(updated)
@@ -881,7 +863,7 @@ const parseEmrContent = (text) => {
     diagnosis: '',
     treatment: ''
   }
-  
+
   if (!text) return result
 
   // 定义字段映射: 模板标签 -> 字段名
@@ -893,11 +875,11 @@ const parseEmrContent = (text) => {
     '诊断': 'diagnosis',
     '处理': 'treatment'
   }
-  
+
   // 按行分割
   const lines = text.split('\n')
   let currentField = null
-  
+
   for (const line of lines) {
     // 检查是否是新字段开始 (格式: "标签: 内容" 或 "标签:内容")
     let matched = false
@@ -911,25 +893,25 @@ const parseEmrContent = (text) => {
         break
       }
     }
-    
+
     // 如果不是新字段，追加到当前字段
     if (!matched && currentField && line.trim()) {
       result[currentField] += '\n' + line.trim()
     }
   }
-  
+
   return result
 }
 
 const applyTemplate = (tpl) => {
   if (tpl.type === 'EMR') {
     const parsed = parseEmrContent(tpl.content)
-    
+
     // 更新 emrForm
     emrForm.symptom = parsed.symptom || emrForm.symptom
     emrForm.diagnosis = parsed.diagnosis || emrForm.diagnosis
     emrForm.content = tpl.content
-    
+
     // 更新电子病历模板数据
     emrTemplateData.value = {
       ...emrTemplateData.value,
@@ -940,7 +922,7 @@ const applyTemplate = (tpl) => {
       diagnosis: parsed.diagnosis || emrTemplateData.value.diagnosis,
       treatment: parsed.treatment || emrTemplateData.value.treatment
     }
-    
+
     message.success('已应用病历模板')
   } else {
     message.info('处方模板暂未实现')
@@ -949,17 +931,17 @@ const applyTemplate = (tpl) => {
 
 const saveEmr = async () => {
   if (!currentPatient.value) return
-  
+
   saving.value = true
   try {
     // Construct content from template data to ensure we have the latest edits
     const templateData = emrTemplateData.value
     const content = [
-        templateData.presentHistory ? `现病史：${templateData.presentHistory}` : '',
-        templateData.pastHistory ? `既往史：${templateData.pastHistory}` : '',
-        templateData.physicalExam ? `查体：${templateData.physicalExam}` : '',
-        templateData.treatment ? `处理：${templateData.treatment}` : ''
-      ].filter(Boolean).join('\n\n')
+      templateData.presentHistory ? `现病史：${templateData.presentHistory}` : '',
+      templateData.pastHistory ? `既往史：${templateData.pastHistory}` : '',
+      templateData.physicalExam ? `查体：${templateData.physicalExam}` : '',
+      templateData.treatment ? `处理：${templateData.treatment}` : ''
+    ].filter(Boolean).join('\n\n')
 
     // Use template data if available, otherwise fallback to emrForm
     const symptom = templateData.symptom || emrForm.symptom
@@ -971,7 +953,7 @@ const saveEmr = async () => {
     // 只提交新的检查和处方（没有 orderId/presId 的是新项目）
     const newPrescriptions = prescriptions.value.filter(p => p.drugId && !p.presId)
     const newLabOrders = labOrders.value.filter(l => l.itemName && !l.orderId)
-    
+
     await emrApi.save({
       regId: currentPatient.value.regId,
       symptom: symptom,
@@ -981,7 +963,7 @@ const saveEmr = async () => {
       labOrders: newLabOrders
     })
     message.success('保存成功')
-    
+
     // Refresh patient detail
     const updated = await doctorApi.getVisitDetail(currentPatient.value.regId)
     selectPatient(updated)
@@ -995,14 +977,14 @@ const saveEmr = async () => {
 // 从电子病历模板保存
 const saveEmrFromTemplate = async () => {
   if (!currentPatient.value) return
-  
+
   saving.value = true
   try {
     const templateData = emrTemplateData.value
     // 只提交新的检查和处方（没有 orderId/presId 的是新项目）
     const newPrescriptions = prescriptions.value.filter(p => p.drugId && !p.presId)
     const newLabOrders = labOrders.value.filter(l => l.itemName && !l.orderId)
-    
+
     await emrApi.save({
       regId: currentPatient.value.regId,
       symptom: templateData.symptom || '',
@@ -1017,13 +999,35 @@ const saveEmrFromTemplate = async () => {
       labOrders: newLabOrders
     })
     message.success('保存成功')
-    
+
     const updated = await doctorApi.getVisitDetail(currentPatient.value.regId)
     selectPatient(updated)
   } catch (e) {
     message.error(e.message || '保存失败')
   } finally {
     saving.value = false
+  }
+}
+
+const callSpecificPatient = async (p) => {
+  try {
+    const res = await doctorApi.callSpecificPatient(doctorId, p.regId)
+    if (res) {
+      message.success('已叫号')
+      loadPatients()
+      // If called patient is not current, switch to it?
+      if (currentPatient.value?.regId !== p.regId) {
+        // Optionally select the patient
+        selectPatient(p) // This uses 'p' which has old status, but selectPatient loads fresh data anyway?
+        // Actually selectPatient uses 'p' initial data for some things but loads 'visitDetail'.
+        // Ideally we should reload the patient list and then select.
+        // Let's just rely on loadPatients and maybe update currentPatient status manually if it matches.
+      } else {
+        currentPatient.value.status = 3
+      }
+    }
+  } catch (e) {
+    message.error(e.message || '叫号失败')
   }
 }
 
@@ -1049,7 +1053,7 @@ const printPrescription = async () => {
     message.warning('暂无处方可打印')
     return
   }
-  
+
   const prescriptionItems = prescriptions.value.map(p => {
     const drug = drugs.value.find(d => d.drugId === p.drugId)
     return {
@@ -1061,7 +1065,7 @@ const printPrescription = async () => {
       usageInstruction: p.usageInstruction || ''
     }
   })
-  
+
   const printWindow = window.open('', '_blank')
   printWindow.document.write(await generatePrescriptionHtml(prescriptionItems))
   printWindow.document.close()
@@ -1078,7 +1082,7 @@ const printLabOrders = async () => {
     message.warning('暂无检查项目可打印')
     return
   }
-  
+
   const printWindow = window.open('', '_blank')
   printWindow.document.write(await generateLabHtml(labOrders.value))
   printWindow.document.close()
@@ -1096,7 +1100,7 @@ const generateEmrHtml = async (data) => {
   const APP_BASE_URL = import.meta.env.VITE_APP_URL || window.location.origin
   const qrUrl = `${APP_BASE_URL}/patient/payment?regId=${regId}`
   const qrSrc = await QRCode.toDataURL(qrUrl, { width: 100, margin: 0 })
-  
+
   return `<!DOCTYPE html>
 <html><head><meta charset="utf-8"><title>门诊病历</title>
 <style>
@@ -1176,7 +1180,7 @@ const generatePrescriptionHtml = async (items) => {
   const APP_BASE_URL = import.meta.env.VITE_APP_URL || window.location.origin
   const qrUrl = `${APP_BASE_URL}/patient/payment?regId=${regId}`
   const qrSrc = await QRCode.toDataURL(qrUrl, { width: 100, margin: 0 })
-  
+
   const drugListHtml = items.map((item, idx) => `
     <div class="drug-item">
       <span class="drug-index">${idx + 1}.</span>
@@ -1186,7 +1190,7 @@ const generatePrescriptionHtml = async (items) => {
       <div class="drug-usage">用法：${item.usageInstruction || '遵医嘱'}</div>
     </div>
   `).join('')
-  
+
   return `<!DOCTYPE html>
 <html><head><meta charset="utf-8"><title>处方笺</title>
 <style>
@@ -1273,7 +1277,7 @@ const generateLabHtml = async (items) => {
   const APP_BASE_URL = import.meta.env.VITE_APP_URL || window.location.origin
   const qrUrl = `${APP_BASE_URL}/patient/payment?regId=${regId}`
   const qrSrc = await QRCode.toDataURL(qrUrl, { width: 100, margin: 0 })
-  
+
   const itemsHtml = items.map((item, idx) => `
     <tr>
       <td>${idx + 1}</td>
@@ -1282,7 +1286,7 @@ const generateLabHtml = async (items) => {
       <td>${getLabStatusText(item.status)}</td>
     </tr>
   `).join('')
-  
+
   return `<!DOCTYPE html>
 <html><head><meta charset="utf-8"><title>检查申请单</title>
 <style>
@@ -1320,7 +1324,7 @@ const generateLabHtml = async (items) => {
       <td>门诊号：${currentPatient.value?.regId || ''}</td>
     </tr>
     <tr>
-      <td colspan="2">科室：${userStore.userInfo?.deptName || ''}</td>
+      <td colspan="2">科室：${currentPatient.value?.deptName || userStore.userInfo?.deptName || ''}</td>
       <td colspan="2">申请日期：${dateStr}</td>
     </tr>
     <tr>
@@ -1356,7 +1360,7 @@ const generateLabHtml = async (items) => {
 const completeVisit = async () => {
   if (!currentPatient.value) return
   try {
-    await doctorApi.complete(currentPatient.value.regId)
+    await doctorApi.completeConsultation(currentPatient.value.regId)
     message.success('就诊完成')
     currentPatient.value = null
     await loadPatients()
@@ -1374,7 +1378,7 @@ const completeVisit = async () => {
   background: #f0f2f5;
   padding: 12px;
   box-sizing: border-box;
-  
+
   .workstation-content {
     flex: 1;
     display: flex;
@@ -1406,7 +1410,7 @@ const completeVisit = async () => {
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
     height: 100%;
 
     .panel-header {
@@ -1418,7 +1422,7 @@ const completeVisit = async () => {
       justify-content: space-between;
       align-items: center;
       flex-shrink: 0;
-      
+
       .header-title {
         display: flex;
         align-items: center;
@@ -1433,19 +1437,19 @@ const completeVisit = async () => {
       padding: 8px 12px;
       border-bottom: 1px solid #f0f0f0;
     }
-    
+
     .patient-list {
       flex: 1;
       overflow-y: auto;
       padding: 8px;
     }
-    
+
     .patient-empty {
       text-align: center;
       color: #999;
       padding: 20px;
     }
-    
+
     .patient-item {
       display: flex;
       align-items: center;
@@ -1455,30 +1459,30 @@ const completeVisit = async () => {
       margin-bottom: 6px;
       border: 1px solid #f0f0f0;
       transition: all 0.2s;
-      
+
       &:hover {
         background: #f5f7fa;
         border-color: #e0e0e0;
       }
-      
+
       &.current {
         background: #e6f7ff;
         border-color: #1890ff;
       }
-      
+
       &.in-consultation {
         border-left: 3px solid #1890ff;
       }
-      
+
       &.waiting {
         border-left: 3px solid #faad14;
       }
-      
+
       &.completed {
         opacity: 0.7;
         border-left: 3px solid #52c41a;
       }
-      
+
       .patient-number {
         width: 28px;
         height: 28px;
@@ -1492,28 +1496,28 @@ const completeVisit = async () => {
         margin-right: 10px;
         flex-shrink: 0;
       }
-      
+
       .patient-info {
         flex: 1;
         min-width: 0;
-        
+
         .name {
           font-weight: 500;
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
         }
-        
+
         .meta {
           font-size: 12px;
           color: #999;
-          
-          span + span::before {
+
+          span+span::before {
             content: ' · ';
           }
         }
       }
-      
+
       .patient-status {
         display: flex;
         flex-direction: column;
@@ -1522,7 +1526,7 @@ const completeVisit = async () => {
       }
     }
   }
-  
+
   // Action Header
   .action-header {
     background: #fff;
@@ -1531,60 +1535,60 @@ const completeVisit = async () => {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
     flex-shrink: 0;
-    
+
     .patient-basic {
       display: flex;
       align-items: center;
       gap: 12px;
-      
+
       .name {
         font-size: 18px;
         font-weight: 600;
       }
-      
+
       .meta {
         color: #666;
       }
     }
-    
+
     .actions {
       display: flex;
       gap: 8px;
     }
   }
-  
+
   // Content Card
   .content-card {
     flex: 1;
     overflow: hidden;
-    
+
     .workspace-tabs {
       height: 100%;
       display: flex;
       flex-direction: column;
-      
+
       :deep(.ant-tabs-nav) {
         margin-bottom: 0;
         background: #fafafa;
         padding: 8px 8px 0 8px;
         flex-shrink: 0;
       }
-      
+
       :deep(.ant-tabs-content-holder) {
         flex: 1;
         overflow: hidden;
         display: flex;
         flex-direction: column;
       }
-      
+
       :deep(.ant-tabs-content) {
         flex: 1;
         height: 100%;
         display: flex;
         flex-direction: column;
-        
+
         .ant-tabs-tabpane {
           flex: 1;
           height: 100%;
@@ -1592,19 +1596,19 @@ const completeVisit = async () => {
           flex-direction: column;
           overflow: hidden;
         }
-        
+
         .ant-tabs-tabpane-active {
           display: flex !important;
         }
       }
-      
+
       .tab-extra-buttons {
         display: flex;
         gap: 8px;
         padding-right: 8px;
       }
     }
-    
+
     .tab-content {
       padding: 16px;
       flex: 1;
@@ -1612,13 +1616,13 @@ const completeVisit = async () => {
       flex-direction: column;
       overflow: hidden;
       min-height: 0;
-      
+
       .emr-form {
         max-width: 800px;
         margin: 0 auto;
         width: 100%;
       }
-      
+
       // 电子病历 tab 特殊样式
       &.emr-tab-content {
         .emr-editor-wrapper {
@@ -1628,13 +1632,13 @@ const completeVisit = async () => {
           background: #f5f5f5;
           border-radius: 4px;
         }
-        
+
         .form-actions {
           flex-shrink: 0;
           margin-top: 12px;
         }
       }
-      
+
       .section-header {
         display: flex;
         justify-content: space-between;
@@ -1643,14 +1647,15 @@ const completeVisit = async () => {
         font-weight: 600;
         font-size: 15px;
         flex-shrink: 0;
-        
+
         .header-actions {
           display: flex;
           gap: 8px;
         }
       }
-      
-      .lab-list, .prescription-list {
+
+      .lab-list,
+      .prescription-list {
         flex: 1;
         overflow-y: auto;
         border: 1px solid #f0f0f0;
@@ -1659,30 +1664,30 @@ const completeVisit = async () => {
         background: #fafafa;
         min-height: 0;
       }
-      
+
       .lab-item {
         background: #fff;
         padding: 12px;
         border-radius: 4px;
         margin-bottom: 8px;
         border: 1px solid #e8e8e8;
-        
+
         .lab-row {
           display: flex;
           justify-content: space-between;
           align-items: center;
-          
+
           .lab-info {
             display: flex;
             align-items: center;
             gap: 12px;
-            
+
             .price {
               color: #ff4d4f;
               font-weight: 500;
             }
           }
-          
+
           .lab-status {
             display: flex;
             align-items: center;
@@ -1690,7 +1695,7 @@ const completeVisit = async () => {
           }
         }
       }
-      
+
       .form-actions {
         margin-top: 20px;
         display: flex;
@@ -1700,39 +1705,39 @@ const completeVisit = async () => {
       }
     }
   }
-  
+
   .history-content {
     padding: 16px;
-    
+
     .empty-tip {
       color: #999;
       text-align: center;
       padding: 20px;
     }
-    
+
     .history-header {
       display: flex;
       gap: 16px;
-      
+
       .date {
         color: #1890ff;
         font-weight: 500;
       }
-      
+
       .diagnosis {
         color: #666;
       }
     }
-    
+
     .history-detail {
       .detail-row {
         margin-bottom: 8px;
-        
+
         label {
           color: #999;
           margin-right: 8px;
         }
-        
+
         .sub-list {
           margin-top: 4px;
           padding-left: 16px;
@@ -1745,7 +1750,7 @@ const completeVisit = async () => {
             align-items: center;
             padding: 4px 0;
             border-bottom: 1px dashed #eee;
-            
+
             &:last-child {
               border-bottom: none;
             }
@@ -1769,14 +1774,14 @@ const completeVisit = async () => {
       }
     }
   }
-  
+
   // Template Panel
   .template-panel {
     .template-list {
       flex: 1;
       overflow-y: auto;
       padding: 8px;
-      
+
       .empty-tip {
         color: #999;
         text-align: center;
@@ -1784,7 +1789,7 @@ const completeVisit = async () => {
         font-size: 13px;
       }
     }
-    
+
     .template-item {
       display: flex;
       justify-content: space-between;
@@ -1794,12 +1799,12 @@ const completeVisit = async () => {
       cursor: pointer;
       border: 1px solid #f0f0f0;
       margin-bottom: 6px;
-      
+
       &:hover {
         background: #f5f7fa;
         border-color: #1890ff;
       }
-      
+
       .tpl-name {
         font-size: 13px;
       }
@@ -1809,24 +1814,24 @@ const completeVisit = async () => {
   .right-tools-panel {
     height: 100%;
     padding: 8px;
-    
+
     .right-tabs {
       height: 100%;
       display: flex;
       flex-direction: column;
-      
+
       :deep(.ant-tabs-content) {
         flex: 1;
         height: 100%;
       }
-      
+
       :deep(.ant-tabs-tabpane) {
         height: 100%;
         overflow: hidden;
       }
     }
   }
-  
+
   .no-patient {
     height: 100%;
     display: flex;
@@ -1843,10 +1848,10 @@ const completeVisit = async () => {
   background: white;
   border: 1px solid #d9d9d9;
   border-radius: 4px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
   z-index: 9999;
   min-width: 150px;
-  
+
   .context-menu-item {
     padding: 8px 16px;
     cursor: pointer;
@@ -1855,9 +1860,47 @@ const completeVisit = async () => {
     gap: 8px;
     font-size: 14px;
     color: #262626;
-    
+
     &:hover {
       background: #f5f5f5;
+    }
+  }
+}
+
+// Report Viewer
+.report-viewer {
+  .report-header {
+    margin-bottom: 20px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #f0f0f0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+
+    h3 {
+      font-size: 18px;
+      font-weight: 600;
+      margin: 0;
+    }
+
+    .time {
+      color: #999;
+    }
+  }
+
+  .report-body {
+    line-height: 1.6;
+    font-size: 14px;
+
+    :deep(img) {
+      max-width: 100%;
+      height: auto;
+      display: block;
+      margin: 10px auto;
+    }
+
+    :deep(p) {
+      margin-bottom: 10px;
     }
   }
 }

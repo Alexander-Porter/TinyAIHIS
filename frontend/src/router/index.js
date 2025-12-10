@@ -4,10 +4,9 @@ const routes = [
   // Entry/Portal
   {
     path: '/',
-    name: 'Portal',
-    component: () => import('@/views/Portal.vue')
+    redirect: '/patient/login'
   },
-  
+
   // Patient Routes (Mobile)
   {
     path: '/patient',
@@ -26,7 +25,7 @@ const routes = [
       { path: 'registration-records', name: 'RegistrationRecords', component: () => import('@/views/patient/RegistrationRecords.vue') },
     ]
   },
-  
+
   // Doctor Routes (PC)
   {
     path: '/doctor',
@@ -38,7 +37,7 @@ const routes = [
       { path: 'templates', name: 'Templates', component: () => import('@/views/doctor/Templates.vue') },
     ]
   },
-  
+
   // Lab Routes (PC)
   {
     path: '/lab',
@@ -49,7 +48,7 @@ const routes = [
       { path: 'workstation', name: 'LabWorkstation', component: () => import('@/views/lab/Workstation.vue') },
     ]
   },
-  
+
   // Pharmacy Routes (PC)
   {
     path: '/pharmacy',
@@ -61,7 +60,7 @@ const routes = [
       { path: 'inventory', name: 'Inventory', component: () => import('@/views/pharmacy/Inventory.vue') },
     ]
   },
-  
+
   // Admin Routes (PC)
   {
     path: '/admin',
@@ -78,7 +77,7 @@ const routes = [
       { path: 'query', name: 'DataQuery', component: () => import('@/views/admin/DataQuery.vue') },
     ]
   },
-  
+
   // Queue Screen (Fullscreen)
   {
     path: '/screen/:deptId',
@@ -96,7 +95,7 @@ const router = createRouter({
 router.beforeEach((to, from, next) => {
   const publicPages = ['/', '/patient/login', '/patient/register', '/doctor/login', '/lab/login', '/pharmacy/login', '/admin/login']
   const isPublicPage = publicPages.includes(to.path) || to.path.startsWith('/screen/')
-  
+
   // Check auth based on path
   if (!isPublicPage) {
     const token = localStorage.getItem('token')
@@ -115,7 +114,7 @@ router.beforeEach((to, from, next) => {
       }
     }
   }
-  
+
   next()
 })
 

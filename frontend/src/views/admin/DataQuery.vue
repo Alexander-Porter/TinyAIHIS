@@ -103,7 +103,14 @@
         @change="handleTableChange"
         :scroll="{ x: 1200 }"
         row-key="id"
-      />
+      >
+        <template #bodyCell="{ column, record }">
+          <template v-if="column.key === 'resultText'">
+            <div v-if="record.resultText" v-html="record.resultText" style="max-height: 100px; overflow-y: auto;"></div>
+            <span v-else>-</span>
+          </template>
+        </template>
+      </a-table>
     </a-card>
   </div>
 </template>
@@ -228,7 +235,7 @@ const columns = computed(() => {
         { title: '检查项目', dataIndex: 'itemName', width: 150 },
         { title: '费用', dataIndex: 'price', width: 100 },
         { title: '状态', dataIndex: 'statusText', width: 100 },
-        { title: '结果', dataIndex: 'resultText', ellipsis: true },
+        { title: '结果', key: 'resultText', dataIndex: 'resultText', ellipsis: true, width: 300 },
         { title: '创建时间', dataIndex: 'createTime', width: 160 }
       ]
     case 'user':

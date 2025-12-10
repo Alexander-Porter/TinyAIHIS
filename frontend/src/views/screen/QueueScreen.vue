@@ -119,24 +119,49 @@ const connectWebSocket = () => {
 }
 
 const handleQueueUpdate = (data) => {
-  if (data.type === 'CALL') {
-    currentCall.value = data.patient
-    
+  // Fix: Backend sends the full queue info object directly, not wrapped in { type, patient, ... }
+  // Structure: { deptId, deptName, current: { ... }, waiting: [...] }
+  
+  if (data && data.deptId == deptId) {
     // Update waiting list
     if (data.waiting) {
       waitingList.value = data.waiting
     }
     
-    // Play TTS
-    speakCall(data.patient.queueNumber)
+    // Check if there is a new call
+    const newCall = data.current
+    if (newCall) {
+      // If the called patient changed, trigger TTS
+      if (!currentCall.value || currentCall.value.regId !== newCall.regId) {
+        speakCall(newCall)
+      }
+      currentCall.value = newCall
+    } else {
+      currentCall.value = null
+    }
+
+    // Update department name if provided
+    if (data.deptName) {
+      deptName.value = data.deptName
+    }
   }
 }
 
 // TTS using Web Speech API
-const speakCall = (queueNumber) => {
-  if ('speechSynthesis' in window) {
-    const utterance = new SpeechSynthesisUtterance()
-    utterance.text = `请 ${queueNumber} 号患者到诊室就诊`
+const speakCall = (patient) => {
+  if ('speechSynthesis' in window && patient) {
+    const { queueNumber, patientName, roomNumber } = patient
+    // Use a more natural phrasing. Handle 0 or null queueNumber gracefully.
+    const numberText = queueNumber > 0 ? `${queueNumber}号` : ''
+    const roomText = roomNumber || '诊室'
+    
+    // Strip privacy masks for TTS if possible, but we only have masked name usually.
+    // If the backend sends masked name, we just read it as is or avoid reading name if too masked.
+    // Let's read "Please number X patient to Room Y" which is standard.
+    
+    const text = `请 ${numberText} ${patientName} 到 ${roomText} 就诊`
+    
+    const utterance = new SpeechSynthesisUtterance(text)
     utterance.lang = 'zh-CN'
     utterance.rate = 0.9
     
@@ -147,12 +172,11 @@ const speakCall = (queueNumber) => {
     window.speechSynthesis.speak(utterance)
     
     setTimeout(() => {
-      const utterance2 = new SpeechSynthesisUtterance()
-      utterance2.text = `请 ${queueNumber} 号患者到诊室就诊`
+      const utterance2 = new SpeechSynthesisUtterance(text)
       utterance2.lang = 'zh-CN'
       utterance2.rate = 0.9
       window.speechSynthesis.speak(utterance2)
-    }, 3000)
+    }, 4000) // Increased delay slightly to avoid overlap
   }
 }
 

@@ -98,16 +98,7 @@
       </div>
     </div>
     
-    <!-- Other Services -->
-    <div class="section-card">
-      <div class="section-title">其他服务</div>
-      <div class="quick-actions small">
-        <div class="action-item" @click="showHospitalNav">
-          <div class="icon-wrapper purple"><van-icon name="location-o" /></div>
-          <div class="text">来院导航</div>
-        </div>
-      </div>
-    </div>
+
     
     <!-- CheckIn Modal -->
     <van-action-sheet v-model:show="checkInModalVisible" title="选择要签到的预约">
@@ -269,9 +260,6 @@ const showQueueDetail = () => {
   queueModalVisible.value = true
 }
 
-const showHospitalNav = () => {
-  showToast('功能开发中')
-}
 
 const doCheckIn = async (reg) => {
   checkingIn.value = reg.regId

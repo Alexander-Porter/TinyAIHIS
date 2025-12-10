@@ -13,14 +13,14 @@ api.interceptors.request.use(
     if (token) {
       config.headers.Authorization = `Bearer ${token}`
     }
-    
+
     // Add user info headers for backend
     const userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}')
     if (userInfo.userId) {
       config.headers['X-User-Id'] = userInfo.userId
       config.headers['X-Doctor-Id'] = userInfo.userId
     }
-    
+
     return config
   },
   error => Promise.reject(error)
@@ -33,7 +33,7 @@ api.interceptors.response.use(
     if (response.config.responseType === 'blob') {
       return response.data
     }
-    
+
     const res = response.data
     if (res.code !== 200) {
       message.error(res.message || '请求失败')
@@ -68,7 +68,7 @@ export const authApi = {
 export const scheduleApi = {
   getDepartments: () => api.get('/schedule/departments'),
   getDoctors: (deptId) => api.get('/schedule/doctors', { params: { deptId } }),
-  getScheduleList: (deptId, startDate, endDate) => 
+  getScheduleList: (deptId, startDate, endDate) =>
     api.get('/schedule/list', { params: { deptId, startDate, endDate } }),
   saveSchedule: (data) => api.post('/schedule/save', data),
 }
@@ -92,7 +92,8 @@ export const doctorApi = {
   pause: (regId) => api.post(`/doctor/pause/${regId}`),
   resume: (regId) => api.post(`/doctor/resume/${regId}`),
   callNext: (doctorId) => api.post(`/doctor/callNext/${doctorId}`),
-  complete: (regId) => api.post(`/doctor/complete/${regId}`),
+  callSpecificPatient: (doctorId, regId) => api.post(`/doctor/call/${doctorId}/${regId}`),
+  completeConsultation: (regId) => api.post(`/doctor/complete/${regId}`),
 }
 
 // EMR APIs
@@ -149,7 +150,7 @@ export const pharmacyApi = {
   payPrescription: (id) => api.post(`/pharmacy/prescription/pay/${id}`),
   payByRecord: (recordId) => api.post(`/pharmacy/prescriptions/pay/record/${recordId}`),
   dispense: (id) => api.post(`/pharmacy/dispense/${id}`),
-  updateStock: (drugId, quantity) => 
+  updateStock: (drugId, quantity) =>
     api.post('/pharmacy/drug/stock', null, { params: { drugId, quantity } }),
   addDrug: (data) => api.post('/pharmacy/drug/add', data),
 }
@@ -168,23 +169,23 @@ export const adminApi = {
   saveUser: (data) => api.post('/admin/user/save', data),
   updateUserStatus: (userId, status) => api.post(`/admin/user/${userId}/status`, null, { params: { status } }),
   deleteUser: (userId) => api.delete(`/admin/user/${userId}`),
-  
+
   // Department management
   saveDepartment: (data) => api.post('/admin/department/save', data),
   updateDepartmentStatus: (deptId, status) => api.post(`/admin/department/${deptId}/status`, null, { params: { status } }),
   deleteDepartment: (deptId) => api.delete(`/admin/department/${deptId}`),
-  
+
   // Consulting room management
   getRooms: () => api.get('/admin/rooms'),
   saveRoom: (data) => api.post('/admin/rooms', data),
   deleteRoom: (roomId) => api.delete(`/admin/room/${roomId}`),
-  
+
   // Schedule template management (weekly recurring schedules)
   getScheduleTemplates: (deptId) => api.get('/admin/schedule-templates', { params: { deptId } }),
   saveScheduleTemplate: (data) => api.post('/admin/schedule-template/save', data),
   deleteScheduleTemplate: (templateId) => api.delete(`/admin/schedule-template/${templateId}`),
   generateWeekSchedules: () => api.post('/admin/schedules/generate'),
-  
+
   // Drug import/export
   importDrugs: (file) => {
     const formData = new FormData()
@@ -194,11 +195,11 @@ export const adminApi = {
     })
   },
   exportDrugs: () => api.get('/admin/drugs/export', { responseType: 'blob' }),
-  
+
   // Statistics
   getStats: () => api.get('/admin/stats'),
   getDashboardStats: () => api.get('/admin/dashboard-stats'),
-  
+
   // Data Query & Export
   queryData: (params) => api.get('/admin/query', { params }),
   exportData: (params) => {
@@ -207,7 +208,7 @@ export const adminApi = {
       const url = window.URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `${params.type}_export_${new Date().toISOString().slice(0,10)}.xlsx`
+      a.download = `${params.type}_export_${new Date().toISOString().slice(0, 10)}.xlsx`
       a.click()
       window.URL.revokeObjectURL(url)
     })
@@ -216,9 +217,17 @@ export const adminApi = {
 
 // Knowledge Base (admin)
 export const kbApi = {
-  list: () => api.get('/admin/kb/list'),
+  list: (keyword, department) => api.get('/admin/kb/list', { params: { keyword, department } }),
   get: (id) => api.get(`/admin/kb/${id}`),
   add: (data) => api.post('/admin/kb', data),
   update: (id, data) => api.put(`/admin/kb/${id}`, data),
-  remove: (id) => api.delete(`/admin/kb/${id}`)
+  remove: (id) => api.delete(`/admin/kb/${id}`),
+  getStats: () => api.get('/admin/kb/stats'),
+  import: (files) => {
+    const formData = new FormData()
+    files.forEach(f => formData.append('files', f))
+    return api.post('/admin/kb/import', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    })
+  }
 }

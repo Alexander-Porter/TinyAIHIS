@@ -6,7 +6,7 @@
           <robot-outlined style="font-size: 48px; color: #1890ff; margin-bottom: 16px" />
           <p>我是您的AI导诊助手，请描述您的症状，我将为您推荐科室。</p>
         </div>
-        
+
         <div v-for="(msg, idx) in messages" :key="idx" class="message-row" :class="msg.role">
           <div class="avatar">
             <user-outlined v-if="msg.role === 'user'" />
@@ -17,7 +17,7 @@
             <div v-if="msg.type === 'tool_call'" class="tool-call-block">
               <!-- Search Knowledge Base -->
               <div v-if="msg.data.name === 'search_knowledge_base'" class="tool-simple-info">
-                <search-outlined /> 
+                <search-outlined />
                 <span>已检索到 {{ msg.data.count || (msg.data.sources ? msg.data.sources.length : 0) }} 份相关信息</span>
               </div>
 
@@ -36,18 +36,18 @@
                   </a-button>
                 </div>
               </div>
-              
+
               <!-- Fallback for other tools -->
               <div v-else class="tool-call-header">
                 <api-outlined /> 调用工具: {{ msg.data.name }}
               </div>
             </div>
-            
+
             <!-- Tool/Status Updates -->
             <div v-else-if="msg.type === 'tool'" class="tool-update">
               <search-outlined /> {{ msg.content }}
             </div>
-            
+
             <!-- Thinking Process -->
             <div v-else-if="msg.type === 'thought'" class="thought-block">
               <div class="thought-header" @click="msg.collapsed = !msg.collapsed">
@@ -58,7 +58,7 @@
                 {{ msg.content }}
               </div>
             </div>
-            
+
             <!-- Final Result Card -->
             <div v-else-if="msg.type === 'result'" class="result-card">
               <div class="result-header">
@@ -74,35 +74,30 @@
                 </a-button>
               </div>
             </div>
-            
+
             <!-- Normal Text Message -->
             <div v-else class="text-content" v-html="renderMarkdown(msg.content)"></div>
           </div>
         </div>
-        
+
         <div v-if="loading" class="loading-status">
           <loading-outlined /> {{ statusText }}
         </div>
       </div>
     </div>
-    
-    <div class="input-area">
-      <a-textarea
-        v-model:value="inputText"
-        placeholder="请描述您的症状，例如：头痛、发烧..."
-        :auto-size="{ minRows: 2, maxRows: 4 }"
-        @pressEnter.prevent="sendMessage"
-        :disabled="loading"
-      />
+
+    <div class="input-area" v-if="!hasUserMessage">
+      <a-textarea v-model:value="inputText" placeholder="请描述您的症状，例如：头痛、发烧..." :auto-size="{ minRows: 2, maxRows: 4 }"
+        @pressEnter.prevent="sendMessage" :disabled="loading" />
       <a-button type="primary" @click="sendMessage" :loading="loading">发送</a-button>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, nextTick, watch } from 'vue'
-import { 
-  UserOutlined, RobotOutlined, LoadingOutlined, 
+import { ref, nextTick, watch, computed } from 'vue'
+import {
+  UserOutlined, RobotOutlined, LoadingOutlined,
   SearchOutlined, BulbOutlined, DownOutlined,
   MedicineBoxOutlined, ApiOutlined, FileTextOutlined
 } from '@ant-design/icons-vue'
@@ -120,6 +115,10 @@ const loading = ref(false)
 const statusText = ref('')
 const messagesRef = ref(null)
 
+const hasUserMessage = computed(() => {
+  return messages.value.some(m => m.role === 'user')
+})
+
 const renderMarkdown = (text) => {
   return marked(text || '')
 }
@@ -135,10 +134,10 @@ const scrollToBottom = () => {
 const handleEvent = (event, data) => {
   // Remove leading space if present (standard SSE adds a space after colon)
   if (data.startsWith(' ')) data = data.slice(1)
-  
+
   // Ignore empty or null messages to prevent interruption
   if (event === 'message' && (data === 'null' || !data)) return
-  
+
   // Decode Base64
   try {
     data = decodeURIComponent(escape(window.atob(data)))
@@ -184,6 +183,9 @@ const handleEvent = (event, data) => {
     if (lastMsg && lastMsg.type === 'text' && lastMsg.role === 'assistant') {
       lastMsg.content += data
     } else {
+      // If starting a new message bubble, ignore leading whitespace/newlines
+      if (!data.trim()) return
+
       messages.value.push({
         role: 'assistant',
         type: 'text',
@@ -202,7 +204,7 @@ const handleEvent = (event, data) => {
       console.error('Failed to parse result', e)
     }
   }
-  
+
   scrollToBottom()
 }
 
@@ -211,12 +213,12 @@ const processBuffer = (chunk) => {
   buffer += chunk
   const lines = buffer.split('\n')
   buffer = lines.pop() || ''
-  
+
   let currentEvent = null
-  
+
   for (const line of lines) {
     if (line.trim() === '') continue
-    
+
     if (line.startsWith('event:')) {
       currentEvent = line.slice(6).trim()
     } else if (line.startsWith('data:')) {
@@ -233,7 +235,7 @@ const processBuffer = (chunk) => {
       // event: thought
       // data: xxx
       // \n
-      
+
       // So if I see 'data:', I handle it with currentEvent.
     }
   }
@@ -241,20 +243,20 @@ const processBuffer = (chunk) => {
 
 const sendMessage = async () => {
   if (!inputText.value.trim() || loading.value) return
-  
+
   const text = inputText.value
   inputText.value = ''
-  
+
   // Add user message
   messages.value.push({
     role: 'user',
     type: 'text',
     content: text
   })
-  
+
   loading.value = true
   statusText.value = '正在连接...'
-  
+
   try {
     const response = await fetch('/api/triage/stream', {
       method: 'POST',
@@ -267,14 +269,14 @@ const sendMessage = async () => {
         bodyPart: '' // Optional
       })
     })
-    
+
     const reader = response.body.getReader()
     const decoder = new TextDecoder()
-    
+
     while (true) {
       const { done, value } = await reader.read()
       if (done) break
-      
+
       const chunk = decoder.decode(value, { stream: true })
       processBuffer(chunk)
     }
@@ -332,41 +334,41 @@ const handleResultSelect = (result) => {
   background: #f5f7fa;
   border-radius: 8px;
   overflow: hidden;
-  
+
   .chat-window {
     flex: 1;
     overflow-y: auto;
     padding: 20px;
-    
+
     .empty-state {
       text-align: center;
       color: #999;
       margin-top: 40px;
     }
-    
+
     .message-row {
       display: flex;
       gap: 12px;
       margin-bottom: 20px;
-      
+
       &.user {
         flex-direction: row-reverse;
-        
+
         .message-bubble {
           background: #1890ff;
           color: #fff;
           border-radius: 12px 0 12px 12px;
         }
       }
-      
+
       &.assistant {
         .message-bubble {
           background: #fff;
           border-radius: 0 12px 12px 12px;
-          box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
         }
       }
-      
+
       .avatar {
         width: 36px;
         height: 36px;
@@ -379,19 +381,19 @@ const handleResultSelect = (result) => {
         font-size: 20px;
         flex-shrink: 0;
       }
-      
+
       .message-bubble {
         max-width: 80%;
         padding: 12px;
         position: relative;
-        
+
         .tool-call-block {
           background: #e6f7ff;
           border: 1px solid #91d5ff;
           border-radius: 8px;
           margin-bottom: 12px;
           overflow: hidden;
-          
+
           .tool-call-header {
             padding: 8px 12px;
             background: #bae7ff;
@@ -402,20 +404,20 @@ const handleResultSelect = (result) => {
             align-items: center;
             gap: 8px;
           }
-          
+
           .tool-call-content {
             padding: 10px 12px;
-            
+
             .tool-param {
               margin-bottom: 8px;
               font-size: 13px;
-              
+
               .param-label {
                 font-weight: 600;
                 color: #595959;
                 margin-right: 8px;
               }
-              
+
               .param-value {
                 color: #262626;
                 background: #fff;
@@ -423,7 +425,7 @@ const handleResultSelect = (result) => {
                 border-radius: 3px;
               }
             }
-            
+
             .tool-sources {
               .param-label {
                 font-weight: 600;
@@ -431,7 +433,7 @@ const handleResultSelect = (result) => {
                 display: block;
                 margin-bottom: 6px;
               }
-              
+
               .source-list {
                 .source-item {
                   padding: 4px 8px;
@@ -448,7 +450,7 @@ const handleResultSelect = (result) => {
             }
           }
         }
-        
+
         .tool-update {
           color: #666;
           font-size: 12px;
@@ -460,14 +462,14 @@ const handleResultSelect = (result) => {
           padding: 4px 8px;
           border-radius: 4px;
         }
-        
+
         .thought-block {
           background: #f9f9f9;
           border-left: 3px solid #faad14;
           margin-bottom: 12px;
           border-radius: 4px;
           overflow: hidden;
-          
+
           .thought-header {
             padding: 6px 10px;
             font-size: 12px;
@@ -477,13 +479,13 @@ const handleResultSelect = (result) => {
             align-items: center;
             gap: 6px;
             font-weight: 500;
-            
+
             .collapse-icon {
               margin-left: auto;
               transition: transform 0.3s;
             }
           }
-          
+
           .thought-content {
             padding: 8px 10px;
             font-size: 13px;
@@ -492,13 +494,13 @@ const handleResultSelect = (result) => {
             border-top: 1px solid #eee;
           }
         }
-        
+
         .result-card {
           border: 1px solid #e8e8e8;
           border-radius: 8px;
           padding: 12px;
           background: #fafafa;
-          
+
           .result-header {
             font-weight: bold;
             font-size: 16px;
@@ -508,7 +510,7 @@ const handleResultSelect = (result) => {
             align-items: center;
             gap: 8px;
           }
-          
+
           .result-body {
             font-size: 14px;
             color: #333;
@@ -527,7 +529,7 @@ const handleResultSelect = (result) => {
 
         .dept-recommendation {
           margin-top: 8px;
-          
+
           .dept-card {
             background: #fff;
             border: 1px solid #e6f7ff;
@@ -552,14 +554,14 @@ const handleResultSelect = (result) => {
 
             .dept-info {
               flex: 1;
-              
+
               h4 {
                 margin: 0 0 4px;
                 font-size: 16px;
                 font-weight: 600;
                 color: #262626;
               }
-              
+
               p {
                 margin: 0;
                 font-size: 13px;
@@ -568,23 +570,70 @@ const handleResultSelect = (result) => {
             }
           }
         }
-        
+
         .text-content {
           line-height: 1.6;
-          
-          :deep(p) { margin-bottom: 8px; &:last-child { margin-bottom: 0; } }
-          :deep(ul), :deep(ol) { padding-left: 20px; margin-bottom: 8px; }
-          :deep(h1), :deep(h2), :deep(h3), :deep(h4) { font-weight: 600; margin: 12px 0 8px; color: #333; }
-          :deep(h1) { font-size: 1.4em; }
-          :deep(h2) { font-size: 1.2em; }
-          :deep(h3) { font-size: 1.1em; }
-          :deep(code) { background: rgba(0,0,0,0.05); padding: 2px 4px; border-radius: 3px; font-family: monospace; }
-          :deep(pre) { background: #f5f5f5; padding: 10px; border-radius: 4px; overflow-x: auto; margin-bottom: 8px; }
-          :deep(blockquote) { border-left: 4px solid #ddd; margin: 0 0 8px; padding-left: 12px; color: #666; }
+
+          :deep(p) {
+            margin-bottom: 8px;
+
+            &:last-child {
+              margin-bottom: 0;
+            }
+          }
+
+          :deep(ul),
+          :deep(ol) {
+            padding-left: 20px;
+            margin-bottom: 8px;
+          }
+
+          :deep(h1),
+          :deep(h2),
+          :deep(h3),
+          :deep(h4) {
+            font-weight: 600;
+            margin: 12px 0 8px;
+            color: #333;
+          }
+
+          :deep(h1) {
+            font-size: 1.4em;
+          }
+
+          :deep(h2) {
+            font-size: 1.2em;
+          }
+
+          :deep(h3) {
+            font-size: 1.1em;
+          }
+
+          :deep(code) {
+            background: rgba(0, 0, 0, 0.05);
+            padding: 2px 4px;
+            border-radius: 3px;
+            font-family: monospace;
+          }
+
+          :deep(pre) {
+            background: #f5f5f5;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+            margin-bottom: 8px;
+          }
+
+          :deep(blockquote) {
+            border-left: 4px solid #ddd;
+            margin: 0 0 8px;
+            padding-left: 12px;
+            color: #666;
+          }
         }
       }
     }
-    
+
     .loading-status {
       text-align: center;
       color: #999;
@@ -592,7 +641,7 @@ const handleResultSelect = (result) => {
       margin-top: 10px;
     }
   }
-  
+
   .input-area {
     padding: 16px;
     background: #fff;
