@@ -47,10 +47,11 @@ public class DataQueryServiceImpl implements DataQueryService {
             Long deptId, Long doctorId, String role,
             Long drugId, Integer status, String keyword,
             boolean excludeChief) {
-        
+
         return switch (type) {
             case "registration" -> queryRegistrations(page, size, startDate, endDate, deptId, doctorId, status);
-            case "prescription" -> queryPrescriptions(page, size, startDate, endDate, deptId, doctorId, drugId, status, excludeChief);
+            case "prescription" ->
+                queryPrescriptions(page, size, startDate, endDate, deptId, doctorId, drugId, status, excludeChief);
             case "lab" -> queryLabOrders(page, size, startDate, endDate, deptId, doctorId, status);
             case "user" -> queryUsers(page, size, deptId, role, status, keyword);
             case "department" -> queryDepartments(page, size, status, keyword);
@@ -61,43 +62,51 @@ public class DataQueryServiceImpl implements DataQueryService {
         };
     }
 
-    private Map<String, Object> queryRegistrations(int page, int size, LocalDate startDate, LocalDate endDate, Long deptId, Long doctorId, Integer status) {
+    private Map<String, Object> queryRegistrations(int page, int size, LocalDate startDate, LocalDate endDate,
+            Long deptId, Long doctorId, Integer status) {
         // First get schedule IDs that match the date range
         Set<Long> scheduleIds = null;
         Map<Long, Schedule> scheduleMap = new HashMap<>();
-        
+
         LambdaQueryWrapper<Schedule> scheduleWrapper = new LambdaQueryWrapper<>();
-        if (startDate != null) scheduleWrapper.ge(Schedule::getScheduleDate, startDate);
-        if (endDate != null) scheduleWrapper.le(Schedule::getScheduleDate, endDate);
-        if (deptId != null) scheduleWrapper.eq(Schedule::getDeptId, deptId);
-        if (doctorId != null) scheduleWrapper.eq(Schedule::getDoctorId, doctorId);
-        
+        if (startDate != null)
+            scheduleWrapper.ge(Schedule::getScheduleDate, startDate);
+        if (endDate != null)
+            scheduleWrapper.le(Schedule::getScheduleDate, endDate);
+        if (deptId != null)
+            scheduleWrapper.eq(Schedule::getDeptId, deptId);
+        if (doctorId != null)
+            scheduleWrapper.eq(Schedule::getDoctorId, doctorId);
+
         List<Schedule> schedules = scheduleMapper.selectList(scheduleWrapper);
         scheduleIds = schedules.stream().map(Schedule::getScheduleId).collect(Collectors.toSet());
         schedules.forEach(s -> scheduleMap.put(s.getScheduleId(), s));
-        
+
         if (scheduleIds.isEmpty() && (startDate != null || endDate != null || deptId != null || doctorId != null)) {
             return Map.of("list", List.of(), "total", 0, "aggregation", Map.of());
         }
-        
+
         // Query registrations
         LambdaQueryWrapper<Registration> wrapper = new LambdaQueryWrapper<>();
         if (scheduleIds != null && !scheduleIds.isEmpty()) {
             wrapper.in(Registration::getScheduleId, scheduleIds);
         }
-        if (status != null) wrapper.eq(Registration::getStatus, status);
+        if (status != null)
+            wrapper.eq(Registration::getStatus, status);
         wrapper.orderByDesc(Registration::getCreateTime);
-        
+
         Page<Registration> pageResult = registrationMapper.selectPage(new Page<>(page, size), wrapper);
-        
+
         // Get related data
-        Set<Long> patientIds = pageResult.getRecords().stream().map(Registration::getPatientId).collect(Collectors.toSet());
-        Set<Long> doctorIds = pageResult.getRecords().stream().map(Registration::getDoctorId).collect(Collectors.toSet());
-        
+        Set<Long> patientIds = pageResult.getRecords().stream().map(Registration::getPatientId)
+                .collect(Collectors.toSet());
+        Set<Long> doctorIds = pageResult.getRecords().stream().map(Registration::getDoctorId)
+                .collect(Collectors.toSet());
+
         Map<Long, String> patientNames = getPatientNames(patientIds);
         Map<Long, SysUser> doctorMap = getDoctorMap(doctorIds);
         Map<Long, String> deptNames = getDeptNames();
-        
+
         List<Map<String, Object>> list = pageResult.getRecords().stream().map(r -> {
             Map<String, Object> map = new LinkedHashMap<>();
             map.put("id", r.getRegId());
@@ -116,60 +125,67 @@ public class DataQueryServiceImpl implements DataQueryService {
             map.put("createTime", r.getCreateTime() != null ? r.getCreateTime().format(DATETIME_FMT) : "");
             return map;
         }).toList();
-        
+
         return Map.of("list", list, "total", pageResult.getTotal(), "aggregation", Map.of());
     }
 
-    private Map<String, Object> queryPrescriptions(int page, int size, LocalDate startDate, LocalDate endDate, 
+    private Map<String, Object> queryPrescriptions(int page, int size, LocalDate startDate, LocalDate endDate,
             Long deptId, Long doctorId, Long drugId, Integer status, boolean excludeChief) {
-        
+
         // Get medical records in date range
         LambdaQueryWrapper<MedicalRecord> recordWrapper = new LambdaQueryWrapper<>();
-        if (startDate != null) recordWrapper.ge(MedicalRecord::getCreateTime, startDate.atStartOfDay());
-        if (endDate != null) recordWrapper.le(MedicalRecord::getCreateTime, endDate.plusDays(1).atStartOfDay());
-        if (doctorId != null) recordWrapper.eq(MedicalRecord::getDoctorId, doctorId);
-        
+        if (startDate != null)
+            recordWrapper.ge(MedicalRecord::getCreateTime, startDate.atStartOfDay());
+        if (endDate != null)
+            recordWrapper.le(MedicalRecord::getCreateTime, endDate.plusDays(1).atStartOfDay());
+        if (doctorId != null)
+            recordWrapper.eq(MedicalRecord::getDoctorId, doctorId);
+
         List<MedicalRecord> records = medicalRecordMapper.selectList(recordWrapper);
         Set<Long> recordIds = records.stream().map(MedicalRecord::getRecordId).collect(Collectors.toSet());
-        Map<Long, MedicalRecord> recordMap = records.stream().collect(Collectors.toMap(MedicalRecord::getRecordId, r -> r));
-        
+        Map<Long, MedicalRecord> recordMap = records.stream()
+                .collect(Collectors.toMap(MedicalRecord::getRecordId, r -> r));
+
         if (recordIds.isEmpty() && (startDate != null || endDate != null || doctorId != null)) {
             return Map.of("list", List.of(), "total", 0, "aggregation", Map.of("totalAmount", 0.0));
         }
-        
+
         // Filter by department and exclude chief if needed
         Map<Long, SysUser> doctorMap = getDoctorMapAll();
         if (deptId != null || excludeChief) {
             final Set<Long> filteredDoctorIds = doctorMap.values().stream()
-                .filter(u -> deptId == null || deptId.equals(u.getDeptId()))
-                .filter(u -> !excludeChief || !"CHIEF".equals(u.getRole()))
-                .map(SysUser::getUserId)
-                .collect(Collectors.toSet());
-            
+                    .filter(u -> deptId == null || deptId.equals(u.getDeptId()))
+                    .filter(u -> !excludeChief || !"CHIEF".equals(u.getRole()))
+                    .map(SysUser::getUserId)
+                    .collect(Collectors.toSet());
+
             recordIds = records.stream()
-                .filter(r -> filteredDoctorIds.contains(r.getDoctorId()))
-                .map(MedicalRecord::getRecordId)
-                .collect(Collectors.toSet());
+                    .filter(r -> filteredDoctorIds.contains(r.getDoctorId()))
+                    .map(MedicalRecord::getRecordId)
+                    .collect(Collectors.toSet());
         }
-        
+
         if (recordIds.isEmpty()) {
             return Map.of("list", List.of(), "total", 0, "aggregation", Map.of("totalAmount", 0.0));
         }
-        
+
         // Query prescriptions
         LambdaQueryWrapper<Prescription> wrapper = new LambdaQueryWrapper<>();
         wrapper.in(Prescription::getRecordId, recordIds);
-        if (drugId != null) wrapper.eq(Prescription::getDrugId, drugId);
-        if (status != null) wrapper.eq(Prescription::getStatus, status);
+        if (drugId != null)
+            wrapper.eq(Prescription::getDrugId, drugId);
+        if (status != null)
+            wrapper.eq(Prescription::getStatus, status);
         wrapper.orderByDesc(Prescription::getCreateTime);
-        
+
         Page<Prescription> pageResult = prescriptionMapper.selectPage(new Page<>(page, size), wrapper);
-        
+
         // Get drug info
         Map<Long, DrugDict> drugMap = getDrugMap();
-        Map<Long, String> patientNames = getPatientNames(records.stream().map(MedicalRecord::getPatientId).collect(Collectors.toSet()));
+        Map<Long, String> patientNames = getPatientNames(
+                records.stream().map(MedicalRecord::getPatientId).collect(Collectors.toSet()));
         Map<Long, String> deptNames = getDeptNames();
-        
+
         // Calculate total amount
         double totalAmount = 0.0;
         for (Prescription p : pageResult.getRecords()) {
@@ -178,9 +194,9 @@ public class DataQueryServiceImpl implements DataQueryService {
                 totalAmount += drug.getPrice().doubleValue() * p.getQuantity();
             }
         }
-        
+
         final double finalTotal = totalAmount;
-        
+
         List<Map<String, Object>> list = pageResult.getRecords().stream().map(p -> {
             Map<String, Object> map = new LinkedHashMap<>();
             map.put("id", p.getPresId());
@@ -195,58 +211,66 @@ public class DataQueryServiceImpl implements DataQueryService {
             map.put("spec", drug != null ? drug.getSpec() : "");
             map.put("quantity", p.getQuantity());
             map.put("price", drug != null ? drug.getPrice() : BigDecimal.ZERO);
-            map.put("amount", drug != null ? drug.getPrice().multiply(BigDecimal.valueOf(p.getQuantity())) : BigDecimal.ZERO);
+            map.put("amount",
+                    drug != null ? drug.getPrice().multiply(BigDecimal.valueOf(p.getQuantity())) : BigDecimal.ZERO);
             map.put("status", p.getStatus());
             map.put("statusText", getPrescriptionStatusText(p.getStatus()));
             map.put("createTime", p.getCreateTime() != null ? p.getCreateTime().format(DATETIME_FMT) : "");
             return map;
         }).toList();
-        
+
         return Map.of("list", list, "total", pageResult.getTotal(), "aggregation", Map.of("totalAmount", finalTotal));
     }
 
-    private Map<String, Object> queryLabOrders(int page, int size, LocalDate startDate, LocalDate endDate, Long deptId, Long doctorId, Integer status) {
+    private Map<String, Object> queryLabOrders(int page, int size, LocalDate startDate, LocalDate endDate, Long deptId,
+            Long doctorId, Integer status) {
         // Get medical records
         LambdaQueryWrapper<MedicalRecord> recordWrapper = new LambdaQueryWrapper<>();
-        if (startDate != null) recordWrapper.ge(MedicalRecord::getCreateTime, startDate.atStartOfDay());
-        if (endDate != null) recordWrapper.le(MedicalRecord::getCreateTime, endDate.plusDays(1).atStartOfDay());
-        if (doctorId != null) recordWrapper.eq(MedicalRecord::getDoctorId, doctorId);
-        
+        if (startDate != null)
+            recordWrapper.ge(MedicalRecord::getCreateTime, startDate.atStartOfDay());
+        if (endDate != null)
+            recordWrapper.le(MedicalRecord::getCreateTime, endDate.plusDays(1).atStartOfDay());
+        if (doctorId != null)
+            recordWrapper.eq(MedicalRecord::getDoctorId, doctorId);
+
         List<MedicalRecord> records = medicalRecordMapper.selectList(recordWrapper);
         Set<Long> recordIds = records.stream().map(MedicalRecord::getRecordId).collect(Collectors.toSet());
-        Map<Long, MedicalRecord> recordMap = records.stream().collect(Collectors.toMap(MedicalRecord::getRecordId, r -> r));
-        
+        Map<Long, MedicalRecord> recordMap = records.stream()
+                .collect(Collectors.toMap(MedicalRecord::getRecordId, r -> r));
+
         if (recordIds.isEmpty() && (startDate != null || endDate != null || doctorId != null)) {
             return Map.of("list", List.of(), "total", 0, "aggregation", Map.of());
         }
-        
+
         // Filter by department
         Map<Long, SysUser> doctorMap = getDoctorMapAll();
         if (deptId != null) {
             Set<Long> deptDoctorIds = doctorMap.values().stream()
-                .filter(u -> deptId.equals(u.getDeptId()))
-                .map(SysUser::getUserId)
-                .collect(Collectors.toSet());
+                    .filter(u -> deptId.equals(u.getDeptId()))
+                    .map(SysUser::getUserId)
+                    .collect(Collectors.toSet());
             recordIds = records.stream()
-                .filter(r -> deptDoctorIds.contains(r.getDoctorId()))
-                .map(MedicalRecord::getRecordId)
-                .collect(Collectors.toSet());
+                    .filter(r -> deptDoctorIds.contains(r.getDoctorId()))
+                    .map(MedicalRecord::getRecordId)
+                    .collect(Collectors.toSet());
         }
-        
+
         if (recordIds.isEmpty()) {
             return Map.of("list", List.of(), "total", 0, "aggregation", Map.of());
         }
-        
+
         LambdaQueryWrapper<LabOrder> wrapper = new LambdaQueryWrapper<>();
         wrapper.in(LabOrder::getRecordId, recordIds);
-        if (status != null) wrapper.eq(LabOrder::getStatus, status);
+        if (status != null)
+            wrapper.eq(LabOrder::getStatus, status);
         wrapper.orderByDesc(LabOrder::getCreateTime);
-        
+
         Page<LabOrder> pageResult = labOrderMapper.selectPage(new Page<>(page, size), wrapper);
-        
-        Map<Long, String> patientNames = getPatientNames(records.stream().map(MedicalRecord::getPatientId).collect(Collectors.toSet()));
+
+        Map<Long, String> patientNames = getPatientNames(
+                records.stream().map(MedicalRecord::getPatientId).collect(Collectors.toSet()));
         Map<Long, String> deptNames = getDeptNames();
-        
+
         List<Map<String, Object>> list = pageResult.getRecords().stream().map(o -> {
             Map<String, Object> map = new LinkedHashMap<>();
             map.put("id", o.getOrderId());
@@ -255,6 +279,7 @@ public class DataQueryServiceImpl implements DataQueryService {
             map.put("patientName", record != null ? patientNames.getOrDefault(record.getPatientId(), "") : "");
             SysUser doctor = record != null ? doctorMap.get(record.getDoctorId()) : null;
             map.put("doctorName", doctor != null ? doctor.getRealName() : "");
+            map.put("deptName", doctor != null ? deptNames.get(doctor.getDeptId()) : "");
             map.put("itemName", o.getItemName());
             map.put("price", o.getPrice());
             map.put("status", o.getStatus());
@@ -263,23 +288,27 @@ public class DataQueryServiceImpl implements DataQueryService {
             map.put("createTime", o.getCreateTime() != null ? o.getCreateTime().format(DATETIME_FMT) : "");
             return map;
         }).toList();
-        
+
         return Map.of("list", list, "total", pageResult.getTotal(), "aggregation", Map.of());
     }
 
-    private Map<String, Object> queryUsers(int page, int size, Long deptId, String role, Integer status, String keyword) {
+    private Map<String, Object> queryUsers(int page, int size, Long deptId, String role, Integer status,
+            String keyword) {
         LambdaQueryWrapper<SysUser> wrapper = new LambdaQueryWrapper<>();
-        if (deptId != null) wrapper.eq(SysUser::getDeptId, deptId);
-        if (StringUtils.hasText(role)) wrapper.eq(SysUser::getRole, role);
-        if (status != null) wrapper.eq(SysUser::getStatus, status);
+        if (deptId != null)
+            wrapper.eq(SysUser::getDeptId, deptId);
+        if (StringUtils.hasText(role))
+            wrapper.eq(SysUser::getRole, role);
+        if (status != null)
+            wrapper.eq(SysUser::getStatus, status);
         if (StringUtils.hasText(keyword)) {
             wrapper.and(w -> w.like(SysUser::getUsername, keyword).or().like(SysUser::getRealName, keyword));
         }
         wrapper.orderByDesc(SysUser::getCreateTime);
-        
+
         Page<SysUser> pageResult = sysUserMapper.selectPage(new Page<>(page, size), wrapper);
         Map<Long, String> deptNames = getDeptNames();
-        
+
         List<Map<String, Object>> list = pageResult.getRecords().stream().map(u -> {
             Map<String, Object> map = new LinkedHashMap<>();
             map.put("id", u.getUserId());
@@ -296,19 +325,20 @@ public class DataQueryServiceImpl implements DataQueryService {
             map.put("createTime", u.getCreateTime() != null ? u.getCreateTime().format(DATETIME_FMT) : "");
             return map;
         }).toList();
-        
+
         return Map.of("list", list, "total", pageResult.getTotal());
     }
 
     private Map<String, Object> queryDepartments(int page, int size, Integer status, String keyword) {
         LambdaQueryWrapper<Department> wrapper = new LambdaQueryWrapper<>();
-        if (status != null) wrapper.eq(Department::getStatus, status);
+        if (status != null)
+            wrapper.eq(Department::getStatus, status);
         if (StringUtils.hasText(keyword)) {
             wrapper.like(Department::getDeptName, keyword);
         }
-        
+
         Page<Department> pageResult = departmentMapper.selectPage(new Page<>(page, size), wrapper);
-        
+
         List<Map<String, Object>> list = pageResult.getRecords().stream().map(d -> {
             Map<String, Object> map = new LinkedHashMap<>();
             map.put("id", d.getDeptId());
@@ -320,23 +350,28 @@ public class DataQueryServiceImpl implements DataQueryService {
             map.put("statusText", d.getStatus() == 1 ? "启用" : "禁用");
             return map;
         }).toList();
-        
+
         return Map.of("list", list, "total", pageResult.getTotal());
     }
 
-    private Map<String, Object> querySchedules(int page, int size, LocalDate startDate, LocalDate endDate, Long deptId, Long doctorId) {
+    private Map<String, Object> querySchedules(int page, int size, LocalDate startDate, LocalDate endDate, Long deptId,
+            Long doctorId) {
         LambdaQueryWrapper<Schedule> wrapper = new LambdaQueryWrapper<>();
-        if (startDate != null) wrapper.ge(Schedule::getScheduleDate, startDate);
-        if (endDate != null) wrapper.le(Schedule::getScheduleDate, endDate);
-        if (deptId != null) wrapper.eq(Schedule::getDeptId, deptId);
-        if (doctorId != null) wrapper.eq(Schedule::getDoctorId, doctorId);
+        if (startDate != null)
+            wrapper.ge(Schedule::getScheduleDate, startDate);
+        if (endDate != null)
+            wrapper.le(Schedule::getScheduleDate, endDate);
+        if (deptId != null)
+            wrapper.eq(Schedule::getDeptId, deptId);
+        if (doctorId != null)
+            wrapper.eq(Schedule::getDoctorId, doctorId);
         wrapper.orderByDesc(Schedule::getScheduleDate);
-        
+
         Page<Schedule> pageResult = scheduleMapper.selectPage(new Page<>(page, size), wrapper);
-        
+
         Map<Long, SysUser> doctorMap = getDoctorMapAll();
         Map<Long, String> deptNames = getDeptNames();
-        
+
         List<Map<String, Object>> list = pageResult.getRecords().stream().map(s -> {
             Map<String, Object> map = new LinkedHashMap<>();
             map.put("id", s.getScheduleId());
@@ -352,19 +387,20 @@ public class DataQueryServiceImpl implements DataQueryService {
             map.put("statusText", s.getStatus() == 1 ? "正常" : "停诊");
             return map;
         }).toList();
-        
+
         return Map.of("list", list, "total", pageResult.getTotal());
     }
 
     private Map<String, Object> queryDrugs(int page, int size, Integer status, String keyword) {
         LambdaQueryWrapper<DrugDict> wrapper = new LambdaQueryWrapper<>();
-        if (status != null) wrapper.eq(DrugDict::getStatus, status);
+        if (status != null)
+            wrapper.eq(DrugDict::getStatus, status);
         if (StringUtils.hasText(keyword)) {
             wrapper.like(DrugDict::getName, keyword);
         }
-        
+
         Page<DrugDict> pageResult = drugDictMapper.selectPage(new Page<>(page, size), wrapper);
-        
+
         List<Map<String, Object>> list = pageResult.getRecords().stream().map(d -> {
             Map<String, Object> map = new LinkedHashMap<>();
             map.put("id", d.getDrugId());
@@ -379,19 +415,20 @@ public class DataQueryServiceImpl implements DataQueryService {
             map.put("statusText", d.getStatus() == 1 ? "启用" : "禁用");
             return map;
         }).toList();
-        
+
         return Map.of("list", list, "total", pageResult.getTotal());
     }
 
     private Map<String, Object> queryCheckItems(int page, int size, Integer status, String keyword) {
         LambdaQueryWrapper<CheckItem> wrapper = new LambdaQueryWrapper<>();
-        if (status != null) wrapper.eq(CheckItem::getStatus, status);
+        if (status != null)
+            wrapper.eq(CheckItem::getStatus, status);
         if (StringUtils.hasText(keyword)) {
             wrapper.like(CheckItem::getItemName, keyword);
         }
-        
+
         Page<CheckItem> pageResult = checkItemMapper.selectPage(new Page<>(page, size), wrapper);
-        
+
         List<Map<String, Object>> list = pageResult.getRecords().stream().map(c -> {
             Map<String, Object> map = new LinkedHashMap<>();
             map.put("id", c.getItemId());
@@ -405,21 +442,24 @@ public class DataQueryServiceImpl implements DataQueryService {
             map.put("statusText", c.getStatus() == 1 ? "启用" : "禁用");
             return map;
         }).toList();
-        
+
         return Map.of("list", list, "total", pageResult.getTotal());
     }
 
     @Override
-    public void exportData(String type, LocalDate startDate, LocalDate endDate, Long deptId, Long doctorId, 
-            String role, Long drugId, Integer status, String keyword, boolean excludeChief, HttpServletResponse response) {
-        
+    @SuppressWarnings("unchecked")
+    public void exportData(String type, LocalDate startDate, LocalDate endDate, Long deptId, Long doctorId,
+            String role, Long drugId, Integer status, String keyword, boolean excludeChief,
+            HttpServletResponse response) {
+
         // Query all data (no pagination)
-        Map<String, Object> result = queryData(type, 1, 10000, startDate, endDate, deptId, doctorId, role, drugId, status, keyword, excludeChief);
+        Map<String, Object> result = queryData(type, 1, 10000, startDate, endDate, deptId, doctorId, role, drugId,
+                status, keyword, excludeChief);
         List<Map<String, Object>> list = (List<Map<String, Object>>) result.get("list");
-        
+
         try (Workbook workbook = new XSSFWorkbook()) {
             Sheet sheet = workbook.createSheet("Data");
-            
+
             if (!list.isEmpty()) {
                 // Header row
                 Row headerRow = sheet.createRow(0);
@@ -427,7 +467,7 @@ public class DataQueryServiceImpl implements DataQueryService {
                 for (int i = 0; i < headers.size(); i++) {
                     headerRow.createCell(i).setCellValue(headers.get(i));
                 }
-                
+
                 // Data rows
                 for (int i = 0; i < list.size(); i++) {
                     Row row = sheet.createRow(i + 1);
@@ -438,11 +478,11 @@ public class DataQueryServiceImpl implements DataQueryService {
                     }
                 }
             }
-            
+
             response.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
             response.setHeader("Content-Disposition", "attachment; filename=" + type + "_export.xlsx");
             workbook.write(response.getOutputStream());
-            
+
         } catch (IOException e) {
             log.error("Export failed", e);
         }
@@ -453,69 +493,71 @@ public class DataQueryServiceImpl implements DataQueryService {
         LocalDate today = LocalDate.now();
         LocalDateTime todayStart = today.atStartOfDay();
         LocalDateTime todayEnd = today.plusDays(1).atStartOfDay();
-        
+
         // Today's registrations
         LambdaQueryWrapper<Registration> regWrapper = new LambdaQueryWrapper<>();
         regWrapper.ge(Registration::getCreateTime, todayStart).lt(Registration::getCreateTime, todayEnd);
         long todayRegistrations = registrationMapper.selectCount(regWrapper);
-        
+
         // Total doctors
         LambdaQueryWrapper<SysUser> doctorWrapper = new LambdaQueryWrapper<>();
         doctorWrapper.in(SysUser::getRole, "DOCTOR", "CHIEF");
         long doctors = sysUserMapper.selectCount(doctorWrapper);
-        
+
         // Today's prescriptions
         LambdaQueryWrapper<Prescription> presWrapper = new LambdaQueryWrapper<>();
         presWrapper.ge(Prescription::getCreateTime, todayStart).lt(Prescription::getCreateTime, todayEnd);
         long todayPrescriptions = prescriptionMapper.selectCount(presWrapper);
-        
+
         // Today's lab orders
         LambdaQueryWrapper<LabOrder> labWrapper = new LambdaQueryWrapper<>();
         labWrapper.ge(LabOrder::getCreateTime, todayStart).lt(LabOrder::getCreateTime, todayEnd);
         long todayLabOrders = labOrderMapper.selectCount(labWrapper);
-        
+
         return Map.of(
-            "todayRegistrations", todayRegistrations,
-            "doctors", doctors,
-            "todayPrescriptions", todayPrescriptions,
-            "todayLabOrders", todayLabOrders
-        );
+                "todayRegistrations", todayRegistrations,
+                "doctors", doctors,
+                "todayPrescriptions", todayPrescriptions,
+                "todayLabOrders", todayLabOrders);
     }
 
     // Helper methods
     private Map<Long, String> getPatientNames(Set<Long> patientIds) {
-        if (patientIds == null || patientIds.isEmpty()) return Map.of();
+        if (patientIds == null || patientIds.isEmpty())
+            return Map.of();
         LambdaQueryWrapper<PatientInfo> wrapper = new LambdaQueryWrapper<>();
         wrapper.in(PatientInfo::getPatientId, patientIds);
         return patientInfoMapper.selectList(wrapper).stream()
-            .collect(Collectors.toMap(PatientInfo::getPatientId, PatientInfo::getName));
+                .collect(Collectors.toMap(PatientInfo::getPatientId, PatientInfo::getName));
     }
 
     private Map<Long, SysUser> getDoctorMap(Set<Long> doctorIds) {
-        if (doctorIds == null || doctorIds.isEmpty()) return Map.of();
+        if (doctorIds == null || doctorIds.isEmpty())
+            return Map.of();
         LambdaQueryWrapper<SysUser> wrapper = new LambdaQueryWrapper<>();
         wrapper.in(SysUser::getUserId, doctorIds);
         return sysUserMapper.selectList(wrapper).stream()
-            .collect(Collectors.toMap(SysUser::getUserId, u -> u));
+                .collect(Collectors.toMap(SysUser::getUserId, u -> u));
     }
 
     private Map<Long, SysUser> getDoctorMapAll() {
         return sysUserMapper.selectList(null).stream()
-            .collect(Collectors.toMap(SysUser::getUserId, u -> u));
+                .collect(Collectors.toMap(SysUser::getUserId, u -> u));
     }
 
     private Map<Long, String> getDeptNames() {
         return departmentMapper.selectList(null).stream()
-            .collect(Collectors.toMap(Department::getDeptId, Department::getDeptName));
+                .collect(Collectors.toMap(Department::getDeptId, Department::getDeptName));
     }
 
     private Map<Long, DrugDict> getDrugMap() {
         return drugDictMapper.selectList(null).stream()
-            .collect(Collectors.toMap(DrugDict::getDrugId, d -> d));
+                .collect(Collectors.toMap(DrugDict::getDrugId, d -> d));
     }
 
     private String getRegistrationStatusText(Integer status) {
-        if (status == null) return "";
+        if (status == null)
+            return "";
         return switch (status) {
             case 0 -> "待支付";
             case 1 -> "已支付";
@@ -528,7 +570,8 @@ public class DataQueryServiceImpl implements DataQueryService {
     }
 
     private String getPrescriptionStatusText(Integer status) {
-        if (status == null) return "";
+        if (status == null)
+            return "";
         return switch (status) {
             case 0 -> "待支付";
             case 1 -> "已支付";
@@ -538,7 +581,8 @@ public class DataQueryServiceImpl implements DataQueryService {
     }
 
     private String getLabStatusText(Integer status) {
-        if (status == null) return "";
+        if (status == null)
+            return "";
         return switch (status) {
             case 0 -> "待支付";
             case 1 -> "待检查";
@@ -548,7 +592,8 @@ public class DataQueryServiceImpl implements DataQueryService {
     }
 
     private String getRoleText(String role) {
-        if (role == null) return "";
+        if (role == null)
+            return "";
         return switch (role) {
             case "ADMIN" -> "管理员";
             case "CHIEF" -> "主任医师";
@@ -560,7 +605,8 @@ public class DataQueryServiceImpl implements DataQueryService {
     }
 
     private String getShiftLabel(String shiftType) {
-        if (shiftType == null) return "";
+        if (shiftType == null)
+            return "";
         return switch (shiftType.toUpperCase()) {
             case "AM" -> "上午";
             case "PM" -> "下午";
