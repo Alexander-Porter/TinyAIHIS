@@ -28,6 +28,7 @@ public class Registration {
      * 3 - in consultation
      * 4 - completed
      * 5 - cancelled
+     * 6 - paused/pending return
      */
     private Integer status;
     private Integer queueNumber;

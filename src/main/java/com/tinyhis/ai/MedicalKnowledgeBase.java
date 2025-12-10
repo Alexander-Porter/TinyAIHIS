@@ -69,7 +69,7 @@ public class MedicalKnowledgeBase {
 
     @Value("${SILICONFLOW_API_KEY:}")
     private String apiKey;
-    
+
     @Value("${medical.search.keyword-weight:0.3}")
     private float defaultKeywordWeight;
 
@@ -111,15 +111,40 @@ public class MedicalKnowledgeBase {
         rateRefillScheduler.shutdownNow();
     }
 
-    public List<MedicalDocument> getAllDocuments() {
+    public List<MedicalDocument> getAllDocuments(String keyword, String department) {
         return documents.values().stream()
+                .filter(d -> (keyword == null || d.getDiseaseName().contains(keyword)))
+                .filter(d -> (department == null || department.isEmpty() || d.getDepartment().equals(department)))
                 .map(this::copyMetadata)
                 .toList();
     }
 
+    public Map<String, Object> getStatistics() {
+        Map<String, Object> stats = new HashMap<>();
+        stats.put("totalDocuments", documents.size());
+
+        // Count by department
+        Map<String, Long> deptCounts = documents.values().stream()
+                .collect(java.util.stream.Collectors.groupingBy(MedicalDocument::getDepartment,
+                        java.util.stream.Collectors.counting()));
+        stats.put("departmentCounts", deptCounts);
+
+        // Vector index stats
+        try {
+            if (indexWriter != null) {
+                stats.put("indexedDocuments", indexWriter.getDocStats().numDocs);
+            }
+        } catch (Exception e) {
+            stats.put("indexedDocuments", 0);
+        }
+
+        return stats;
+    }
+
     public MedicalDocument getDocument(String id) {
         MedicalDocument meta = documents.get(id);
-        if (meta == null) return null;
+        if (meta == null)
+            return null;
         String content = loadContent(meta.getId(), meta.getContent());
         return copyWithContent(meta, content);
     }
@@ -154,20 +179,23 @@ public class MedicalKnowledgeBase {
 
     /**
      * Hybrid search combining keyword and vector search with configurable weights
-     * @param query Search query
-     * @param topK Number of results
-     * @param keywordWeight Weight for keyword search (0.0-1.0), remaining weight goes to vector
+     * 
+     * @param query         Search query
+     * @param topK          Number of results
+     * @param keywordWeight Weight for keyword search (0.0-1.0), remaining weight
+     *                      goes to vector
      * @return List of matched documents with relevance scoring
      */
     public List<MedicalDocument> hybridSearch(String query, int topK, float keywordWeight) {
-        if (searcherManager == null) return List.of();
-        
+        if (searcherManager == null)
+            return List.of();
+
         try {
             searcherManager.maybeRefresh();
             IndexSearcher searcher = searcherManager.acquire();
             try {
                 Map<String, Float> docScores = new HashMap<>();
-                
+
                 // 1. Keyword search
                 if (keywordWeight > 0) {
                     List<ScoredDoc> keywordResults = keywordSearch(searcher, query, topK * 2);
@@ -178,13 +206,14 @@ public class MedicalKnowledgeBase {
                         docScores.put(id, normalizedScore * keywordWeight);
                     }
                 }
-                
+
                 // 2. Vector search
                 float vectorWeight = 1.0f - keywordWeight;
                 if (vectorWeight > 0) {
                     float[] queryVector = embedText(query);
                     if (queryVector != null) {
-                        KnnFloatVectorQuery knnQuery = new KnnFloatVectorQuery("embedding", normalize(queryVector), topK * 2);
+                        KnnFloatVectorQuery knnQuery = new KnnFloatVectorQuery("embedding", normalize(queryVector),
+                                topK * 2);
                         var topDocs = searcher.search(knnQuery, topK * 2);
                         float maxVectorScore = topDocs.scoreDocs.length > 0 ? topDocs.scoreDocs[0].score : 1.0f;
                         var storedFields = searcher.storedFields();
@@ -196,22 +225,22 @@ public class MedicalKnowledgeBase {
                         }
                     }
                 }
-                
+
                 // 3. Sort by combined score and return topK
                 return docScores.entrySet().stream()
-                    .sorted(Map.Entry.<String, Float>comparingByValue().reversed())
-                    .limit(topK)
-                    .map(entry -> {
-                        MedicalDocument doc = documents.get(entry.getKey());
-                        if (doc != null) {
-                            String content = loadContent(entry.getKey(), doc.getContent());
-                            return copyWithContent(doc, content);
-                        }
-                        return null;
-                    })
-                    .filter(doc -> doc != null)
-                    .toList();
-                    
+                        .sorted(Map.Entry.<String, Float>comparingByValue().reversed())
+                        .limit(topK)
+                        .map(entry -> {
+                            MedicalDocument doc = documents.get(entry.getKey());
+                            if (doc != null) {
+                                String content = loadContent(entry.getKey(), doc.getContent());
+                                return copyWithContent(doc, content);
+                            }
+                            return null;
+                        })
+                        .filter(doc -> doc != null)
+                        .toList();
+
             } finally {
                 searcherManager.release(searcher);
             }
@@ -220,32 +249,33 @@ public class MedicalKnowledgeBase {
             return List.of();
         }
     }
-    
+
     /**
      * Keyword-only search using multi-field query
      */
     private List<ScoredDoc> keywordSearch(IndexSearcher searcher, String queryText, int topN) throws Exception {
         // Use multi-field parser to search across multiple fields
-        String[] fields = {"disease_text", "department_text", "symptoms", "causes", "diagnosis", "treatment", "prevention", "content"};
+        String[] fields = { "disease_text", "department_text", "symptoms", "causes", "diagnosis", "treatment",
+                "prevention", "content" };
         Map<String, Float> boosts = new HashMap<>();
-        boosts.put("disease_text", 3.0f);      // Disease name most important
-        boosts.put("symptoms", 2.0f);           // Symptoms very important
-        boosts.put("diagnosis", 1.5f);          // Diagnosis important
-        boosts.put("treatment", 1.2f);          // Treatment relevant
-        boosts.put("department_text", 1.0f);    // Department relevant
+        boosts.put("disease_text", 3.0f); // Disease name most important
+        boosts.put("symptoms", 2.0f); // Symptoms very important
+        boosts.put("diagnosis", 1.5f); // Diagnosis important
+        boosts.put("treatment", 1.2f); // Treatment relevant
+        boosts.put("department_text", 1.0f); // Department relevant
         boosts.put("causes", 1.0f);
         boosts.put("prevention", 0.8f);
-        boosts.put("content", 0.5f);            // General content least weight
-        
+        boosts.put("content", 0.5f); // General content least weight
+
         MultiFieldQueryParser parser = new MultiFieldQueryParser(fields, analyzer, boosts);
         parser.setDefaultOperator(QueryParser.Operator.OR);
-        
+
         Query query = parser.parse(QueryParser.escape(queryText));
-        
+
         TopDocs topDocs = searcher.search(query, topN);
         List<ScoredDoc> results = new ArrayList<>();
         var storedFields = searcher.storedFields();
-        
+
         for (ScoreDoc sd : topDocs.scoreDocs) {
             Document doc = storedFields.document(sd.doc);
             String id = doc.get("id");
@@ -253,14 +283,14 @@ public class MedicalKnowledgeBase {
                 results.add(new ScoredDoc(id, sd.score));
             }
         }
-        
+
         return results;
     }
-    
+
     private static class ScoredDoc {
         final String id;
         final float score;
-        
+
         ScoredDoc(String id, float score) {
             this.id = id;
             this.score = score;
@@ -289,7 +319,8 @@ public class MedicalKnowledgeBase {
             String pathPattern = ensureTrailingSlash(knowledgePath) + "*.json";
             Resource[] resources = resolver.getResources(pathPattern);
 
-            embeddingExecutor = Executors.newFixedThreadPool(Math.max(2, Runtime.getRuntime().availableProcessors() / 2));
+            embeddingExecutor = Executors
+                    .newFixedThreadPool(Math.max(2, Runtime.getRuntime().availableProcessors() / 2));
             List<Runnable> embedTasks = new ArrayList<>();
 
             for (Resource resource : resources) {
@@ -310,7 +341,8 @@ public class MedicalKnowledgeBase {
             if (searcherManager != null) {
                 searcherManager.maybeRefresh();
             }
-            log.info("Loaded {} medical documents into knowledge base from {}", documents.size(), ensureTrailingSlash(knowledgePath));
+            log.info("Loaded {} medical documents into knowledge base from {}", documents.size(),
+                    ensureTrailingSlash(knowledgePath));
         } catch (IOException e) {
             log.warn("No medical knowledge files found at path: {}", knowledgePath);
         } catch (InterruptedException e) {
@@ -321,7 +353,8 @@ public class MedicalKnowledgeBase {
 
     private MedicalDocument loadDocument(Resource resource) throws IOException {
         String filename = resource.getFilename();
-        if (filename == null) return null;
+        if (filename == null)
+            return null;
 
         String diseaseName = filename.replaceAll("^\\d+_", "").replace(".json", "");
 
@@ -344,14 +377,14 @@ public class MedicalKnowledgeBase {
         // Count occurrences of explicit department names in disease name + content
         String text = (diseaseName == null ? "" : diseaseName) + " " + (content == null ? "" : content);
 
-        String[] departments = new String[]{
-            "呼吸内科", "消化内科", "心内科", "神经内科", "内分泌科",
-            "血液科", "风湿免疫科", "肿瘤科", "感染科", "传染科",
-            "肾内科", "内科", "外科", "骨科", "泌尿外科",
-            "普外科", "神经外科", "胸外科", "心外科", "烧伤科",
-            "急诊科", "重症医学科", "妇产科", "产科", "妇科",
-            "儿科", "新生儿科", "皮肤科", "眼科", "耳鼻喉科",
-            "口腔科", "口腔颌面外科"
+        String[] departments = new String[] {
+                "呼吸内科", "消化内科", "心内科", "神经内科", "内分泌科",
+                "血液科", "风湿免疫科", "肿瘤科", "感染科", "传染科",
+                "肾内科", "内科", "外科", "骨科", "泌尿外科",
+                "普外科", "神经外科", "胸外科", "心外科", "烧伤科",
+                "急诊科", "重症医学科", "妇产科", "产科", "妇科",
+                "儿科", "新生儿科", "皮肤科", "眼科", "耳鼻喉科",
+                "口腔科", "口腔颌面外科"
         };
 
         String bestDept = "内科";
@@ -402,9 +435,10 @@ public class MedicalKnowledgeBase {
                 return;
             }
             String content = contentOverride != null ? contentOverride : loadContent(doc.getId(), doc.getContent());
-            if (content == null || content.isBlank()) return;
+            if (content == null || content.isBlank())
+                return;
             float[] embedding = embedText(buildEmbedText(doc.getDiseaseName(), content));
-            if (embedding == null) return;
+            // if (embedding == null) return; // Don't return, allow keyword indexing
             indexVector(doc, embedding);
         } catch (Exception e) {
             log.warn("Failed to index vector for {}", doc.getId(), e);
@@ -412,7 +446,8 @@ public class MedicalKnowledgeBase {
     }
 
     private boolean hasVector(String id) throws IOException {
-        if (searcherManager == null) return false;
+        if (searcherManager == null)
+            return false;
         searcherManager.maybeRefresh();
         IndexSearcher searcher = searcherManager.acquire();
         try {
@@ -424,19 +459,20 @@ public class MedicalKnowledgeBase {
     }
 
     private void indexVector(MedicalDocument doc, float[] vector) throws IOException {
-        if (indexWriter == null) return;
+        if (indexWriter == null)
+            return;
         float[] normalized = normalize(vector);
         Document luceneDoc = new Document();
-        
+
         // For exact matching and retrieval
         luceneDoc.add(new StringField("id", doc.getId(), Field.Store.YES));
         luceneDoc.add(new StoredField("diseaseName", doc.getDiseaseName()));
         luceneDoc.add(new StoredField("department", doc.getDepartment()));
-        
+
         // For keyword search - using TextField for full-text search
         luceneDoc.add(new TextField("disease_text", doc.getDiseaseName(), Field.Store.NO));
         luceneDoc.add(new TextField("department_text", doc.getDepartment(), Field.Store.NO));
-        
+
         // Parse content to extract searchable fields
         String content = loadContent(doc.getId(), doc.getContent());
         if (content != null && !content.isEmpty()) {
@@ -448,15 +484,17 @@ public class MedicalKnowledgeBase {
                 luceneDoc.add(new TextField("content", content, Field.Store.NO));
             }
         }
-        
+
         // Vector field for semantic search
-        luceneDoc.add(new KnnFloatVectorField("embedding", normalized));
-        
+        if (normalized != null) {
+            luceneDoc.add(new KnnFloatVectorField("embedding", normalized));
+        }
+
         indexWriter.updateDocument(new Term("id", doc.getId()), luceneDoc);
         indexWriter.commit();
         searcherManager.maybeRefresh();
     }
-    
+
     private void indexJsonFields(Document luceneDoc, JsonNode node) {
         // Index common medical fields
         indexField(luceneDoc, "symptoms", node, "症状", "主要表现", "临床表现");
@@ -464,7 +502,7 @@ public class MedicalKnowledgeBase {
         indexField(luceneDoc, "diagnosis", node, "诊断", "鉴别诊断");
         indexField(luceneDoc, "treatment", node, "治疗", "治疗方法", "治疗方案");
         indexField(luceneDoc, "prevention", node, "预防", "预防措施");
-        
+
         // Index all text content for general search
         StringBuilder allText = new StringBuilder();
         extractAllText(node, allText);
@@ -472,7 +510,7 @@ public class MedicalKnowledgeBase {
             luceneDoc.add(new TextField("content", allText.toString(), Field.Store.NO));
         }
     }
-    
+
     private void indexField(Document luceneDoc, String fieldName, JsonNode node, String... keys) {
         for (String key : keys) {
             JsonNode field = node.get(key);
@@ -481,7 +519,7 @@ public class MedicalKnowledgeBase {
             }
         }
     }
-    
+
     private void extractAllText(JsonNode node, StringBuilder sb) {
         if (node.isTextual()) {
             sb.append(node.asText()).append(" ");
@@ -496,7 +534,8 @@ public class MedicalKnowledgeBase {
 
     private String buildEmbedText(String diseaseName, String content) {
         String raw = diseaseName + "\n" + content;
-        // Keep input under SiliconFlow 8k token limit (Chinese ~1 char/token); trim aggressively to avoid 413.
+        // Keep input under SiliconFlow 8k token limit (Chinese ~1 char/token); trim
+        // aggressively to avoid 413.
         int maxChars = 8000;
         if (raw.length() > maxChars) {
             return raw.substring(0, maxChars);
@@ -608,8 +647,11 @@ public class MedicalKnowledgeBase {
     }
 
     private float[] normalize(float[] vector) {
+        if (vector == null)
+            return null;
         float len = VectorUtil.dotProduct(vector, vector);
-        if (len == 0) return vector;
+        if (len == 0)
+            return vector;
         float norm = (float) Math.sqrt(len);
         float[] normalized = new float[vector.length];
         for (int i = 0; i < vector.length; i++) {

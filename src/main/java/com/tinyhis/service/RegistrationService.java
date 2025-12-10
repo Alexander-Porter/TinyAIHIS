@@ -47,6 +47,11 @@ public interface RegistrationService {
     List<Registration> getWaitingQueue(Long doctorId);
 
     /**
+     * Call specific patient (jump queue)
+     */
+    Registration callSpecificPatient(Long doctorId, Long regId);
+
+    /**
      * Call next patient
      */
     Registration callNext(Long doctorId);

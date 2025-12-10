@@ -13,7 +13,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -95,7 +94,7 @@ public class EmrServiceImpl implements EmrService {
     public List<MedicalRecord> getRecordsByPatient(Long patientId) {
         LambdaQueryWrapper<MedicalRecord> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(MedicalRecord::getPatientId, patientId)
-               .orderByDesc(MedicalRecord::getCreateTime);
+                .orderByDesc(MedicalRecord::getCreateTime);
         return medicalRecordMapper.selectList(wrapper);
     }
 
@@ -119,7 +118,7 @@ public class EmrServiceImpl implements EmrService {
         return list.stream().map(p -> {
             PrescriptionDetailDTO dto = new PrescriptionDetailDTO();
             BeanUtils.copyProperties(p, dto);
-            
+
             DrugDict drug = drugDictMapper.selectById(p.getDrugId());
             if (drug != null) {
                 dto.setDrugName(drug.getName());
@@ -142,7 +141,7 @@ public class EmrServiceImpl implements EmrService {
     public List<EmrTemplate> getTemplatesByDept(Long deptId) {
         LambdaQueryWrapper<EmrTemplate> wrapper = new LambdaQueryWrapper<>();
         wrapper.and(w -> w.isNull(EmrTemplate::getDeptId).or().eq(EmrTemplate::getDeptId, deptId))
-               .eq(EmrTemplate::getStatus, 1);
+                .eq(EmrTemplate::getStatus, 1);
         return emrTemplateMapper.selectList(wrapper);
     }
 

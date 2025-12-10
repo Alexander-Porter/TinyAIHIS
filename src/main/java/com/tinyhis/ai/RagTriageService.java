@@ -25,7 +25,6 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
-import java.util.stream.Collectors;
 
 /**
  * 基于 RAG 的分诊服务，使用直接的 HTTP 客户端与 SiliconFlow/DeepSeek 进行交互。
@@ -164,10 +163,11 @@ public class RagTriageService {
                 你是一名充满人文关怀的医院导诊助手。你的目标是根据患者的描述，推荐最合适的就诊科室。
 
                 请遵循以下原则：
-                1. 态度亲切、温和，不要使用专业术语吓唬患者，要安抚患者的情绪。
-                2. 如果信息不足，可以温和地询问更多细节。
-                3. 如果需要医学知识辅助判断，请调用 search_knowledge_base 函数。
-                4. 当你确定患者应该去哪个科室时，请务必调用 recommend_department 函数，并告知患者前往该科室。
+                1. 态度亲切、温和，安抚患者情绪。
+                2. 不要询问细节！请根据仅有的描述，直接判断最可能的科室。
+                3. 如果症状不明确，请根据经验进行推荐，不要犹豫。
+                4. 请务必调用 recommend_department 函数，并告知患者前往该科室。
+                5. 一轮对话仅需输出一句建议并调用工具，不要多轮对话。
 
                 输出包含：
                     给患者的温馨建议。
@@ -210,7 +210,7 @@ public class RagTriageService {
 
         Map<String, Object> recommendFunction = Map.of(
                 "name", "recommend_department",
-                "description", "当确定患者应该去的科室时调用此函数。返回科室的详细信息。",
+                "description", "当确定患者应该去的科室时调用此函数。返回科室的详细信息。只在导诊的时候使用，医生无需使用。",
                 "parameters", Map.of(
                         "type", "object",
                         "properties", Map.of(
@@ -242,7 +242,7 @@ public class RagTriageService {
             System.out.println("SiliconFlow Chat Request: " + objectMapper.writeValueAsString(body));
             String json = objectMapper.writeValueAsString(body);
 
-                HttpRequest request = HttpRequest.newBuilder()
+            HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create(siliconflowApiUrl + "/chat/completions"))
                     .timeout(Duration.ofSeconds(60))
                     .header("Content-Type", "application/json")
@@ -262,6 +262,7 @@ public class RagTriageService {
             Map<String, ToolCallState> toolCalls = new LinkedHashMap<>();
             StringBuilder stageContent = new StringBuilder();
             String finishReason = null;
+            String pendingNewLine = null;
 
             while ((line = reader.readLine()) != null) {
                 if (line.isEmpty() || !line.startsWith("data:"))
@@ -281,17 +282,44 @@ public class RagTriageService {
                     log.info(choices.toString());
                     String reasoning = delta.path("reasoning_content").asText("");
                     if (!reasoning.isEmpty()) {
+                        if (pendingNewLine != null) {
+                            pendingNewLine = null; // Discard pending newline if switching to thought
+                        }
                         sendEvent(emitter, "thought", reasoning);
                     }
 
                     String content = delta.path("content").asText("");
                     if (!content.isEmpty()) {
-                        stageContent.append(content);
-                        sendEvent(emitter, "message", content);
+                        if ("\n".equals(content)) {
+                            if (pendingNewLine != null) {
+                                // Previous was \n, current is \n. Concatenate and send.
+                                String text = pendingNewLine + content;
+                                stageContent.append(text);
+                                sendEvent(emitter, "message", text);
+                                pendingNewLine = null;
+                            } else {
+                                // Current is \n, buffer it.
+                                pendingNewLine = content;
+                            }
+                        } else {
+                            // Current is text
+                            if (pendingNewLine != null) {
+                                String text = pendingNewLine + content;
+                                stageContent.append(text);
+                                sendEvent(emitter, "message", text);
+                                pendingNewLine = null;
+                            } else {
+                                stageContent.append(content);
+                                sendEvent(emitter, "message", content);
+                            }
+                        }
                     }
 
                     com.fasterxml.jackson.databind.JsonNode toolCallNodes = delta.path("tool_calls");
-                    if (toolCallNodes.isArray()) {
+                    if (toolCallNodes.isArray() && !toolCallNodes.isEmpty()) {
+                        if (pendingNewLine != null) {
+                            pendingNewLine = null; // Discard pending newline if switching to tool calls
+                        }
                         log.info("Tool call delta: {}", toolCallNodes.toString());
                         for (com.fasterxml.jackson.databind.JsonNode call : toolCallNodes) {
                             int index = call.path("index").asInt(-1);
@@ -398,6 +426,12 @@ public class RagTriageService {
 
         if ("recommend_department".equals(toolName)) {
             String deptName = args.getOrDefault("departmentName", "").toString();
+            // Critical fix: if departmentName is empty but the model passed a 'query'
+            // (fallback parsing), use it
+            if (deptName.isEmpty() && args.containsKey("query")) {
+                deptName = args.get("query").toString();
+            }
+
             Map<String, Object> deptInfo = buildDepartmentInfo(deptName);
 
             toolCall.put("department", deptInfo);

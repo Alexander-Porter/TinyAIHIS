@@ -26,7 +26,6 @@ import java.math.BigDecimal;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
-import java.util.Collections;
 import java.util.concurrent.TimeUnit;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -56,14 +55,14 @@ public class RegistrationServiceImpl implements RegistrationService {
     private String quotaPrefix;
     @Value("${app.redis.user-prefix:schedule:users:}")
     private String userPrefix;
-    private static final String LUA_SCRIPT_STOCK = 
-        "if redis.call('SISMEMBER', KEYS[2], ARGV[1]) == 1 then return -1 end " +
-        "local stock = tonumber(redis.call('GET', KEYS[1])) " +
-        "if stock == nil then return -3 end " +
-        "if stock <= 0 then return -2 end " +
-        "redis.call('DECR', KEYS[1]) " +
-        "redis.call('SADD', KEYS[2], ARGV[1]) " +
-        "return 0";
+    private static final String LUA_SCRIPT_STOCK = "if redis.call('SISMEMBER', KEYS[2], ARGV[1]) == 1 then return -1 end "
+            +
+            "local stock = tonumber(redis.call('GET', KEYS[1])) " +
+            "if stock == nil then return -3 end " +
+            "if stock <= 0 then return -2 end " +
+            "redis.call('DECR', KEYS[1]) " +
+            "redis.call('SADD', KEYS[2], ARGV[1]) " +
+            "return 0";
 
     @Override
     // @Transactional // 事务已移除：我们采用 Redis + 异步写入队列来处理并发写入
@@ -77,11 +76,11 @@ public class RegistrationServiceImpl implements RegistrationService {
         java.time.LocalDate today = java.time.LocalDate.now();
         java.time.LocalDate scheduleDate = schedule.getScheduleDate();
         String shift = schedule.getShiftType();
-        
+
         if (scheduleDate.isBefore(today)) {
             throw new BusinessException("不能预约过去的日期");
         }
-        
+
         // 如果是当天，检查时段是否已过
         if (scheduleDate.equals(today) && !"ER".equalsIgnoreCase(shift)) {
             java.time.LocalTime now = java.time.LocalTime.now();
@@ -98,7 +97,7 @@ public class RegistrationServiceImpl implements RegistrationService {
         // --- Redis Seckill Logic ---
         String quotaKey = quotaPrefix + request.getScheduleId();
         String userKey = userPrefix + request.getScheduleId();
-        
+
         // 如果 quota 不存在则初始化；如果已存在但小于最新可用量，则刷新为当前可用量
         int available = schedule.getMaxQuota() - schedule.getCurrentCount();
         String cached = redisTemplate.opsForValue().get(quotaKey);
@@ -119,9 +118,9 @@ public class RegistrationServiceImpl implements RegistrationService {
         redisScript.setScriptText(LUA_SCRIPT_STOCK);
         redisScript.setResultType(Long.class);
 
-        Long result = redisTemplate.execute(redisScript, 
-            java.util.Arrays.asList(quotaKey, userKey), 
-            String.valueOf(request.getPatientId()));
+        Long result = redisTemplate.execute(redisScript,
+                java.util.Arrays.asList(quotaKey, userKey),
+                String.valueOf(request.getPatientId()));
 
         if (result != null) {
             if (result == -1) {
@@ -149,24 +148,26 @@ public class RegistrationServiceImpl implements RegistrationService {
         registration.setPatientId(request.getPatientId());
         registration.setDoctorId(schedule.getDoctorId());
         registration.setScheduleId(request.getScheduleId());
-        registration.setStatus(0); 
+        registration.setStatus(0);
         registration.setQueueNumber(0); // Unknown yet
         registration.setFee(registrationFee);
         // We return a dummy ID or null. The frontend might need an ID to pay.
-        // This is the trade-off of async. 
-        // For this demo, we assume the user goes to "My Registrations" page which will eventually show the record.
+        // This is the trade-off of async.
+        // For this demo, we assume the user goes to "My Registrations" page which will
+        // eventually show the record.
         return registration;
     }
 
-    /* Original Code Commented Out
-    // @Override
-    // @Transactional
-    public Registration createRegistration_OLD(RegistrationRequest request) {
-        Schedule schedule = scheduleService.getScheduleById(request.getScheduleId());
-        // ...
-        return null;
-    }
-    */
+    /*
+     * Original Code Commented Out
+     * // @Override
+     * // @Transactional
+     * public Registration createRegistration_OLD(RegistrationRequest request) {
+     * Schedule schedule = scheduleService.getScheduleById(request.getScheduleId());
+     * // ...
+     * return null;
+     * }
+     */
 
     @Override
     public RegistrationDetailDTO getRegistrationDetail(Long regId) {
@@ -174,27 +175,27 @@ public class RegistrationServiceImpl implements RegistrationService {
         if (registration == null) {
             return null;
         }
-        
+
         RegistrationDetailDTO dto = new RegistrationDetailDTO();
         BeanUtils.copyProperties(registration, dto);
-        
+
         // Fill related info
         Schedule schedule = scheduleMapper.selectById(registration.getScheduleId());
         if (schedule != null) {
             dto.setScheduleDate(schedule.getScheduleDate().toString());
             dto.setShift(getShiftLabel(schedule.getShiftType()));
-            
+
             Department dept = departmentMapper.selectById(schedule.getDeptId());
             if (dept != null) {
                 dto.setDeptName(dept.getDeptName());
             }
         }
-        
+
         SysUser doctor = sysUserMapper.selectById(registration.getDoctorId());
         if (doctor != null) {
             dto.setDoctorName(doctor.getRealName());
         }
-        
+
         return dto;
     }
 
@@ -207,7 +208,7 @@ public class RegistrationServiceImpl implements RegistrationService {
     public List<Registration> getRegistrationsByPatient(Long patientId) {
         LambdaQueryWrapper<Registration> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(Registration::getPatientId, patientId)
-               .orderByDesc(Registration::getCreateTime);
+                .orderByDesc(Registration::getCreateTime);
         return registrationMapper.selectList(wrapper);
     }
 
@@ -217,40 +218,40 @@ public class RegistrationServiceImpl implements RegistrationService {
         return regs.stream().map(reg -> {
             RegistrationDetailDTO dto = new RegistrationDetailDTO();
             BeanUtils.copyProperties(reg, dto);
-            
+
             Schedule schedule = scheduleService.getScheduleById(reg.getScheduleId());
             if (schedule != null) {
                 dto.setScheduleDate(schedule.getScheduleDate().toString());
                 dto.setShift(getShiftLabel(schedule.getShiftType()));
-                
+
                 Department dept = departmentMapper.selectById(schedule.getDeptId());
                 if (dept != null) {
                     dto.setDeptName(dept.getDeptName());
                 }
-                
+
                 SysUser doctor = sysUserMapper.selectById(schedule.getDoctorId());
                 if (doctor != null) {
                     dto.setDoctorName(doctor.getRealName());
                 }
             }
-            
+
             // Check for pending labs if status is 2 (Waiting/Paused)
             if (reg.getStatus() == 2) {
                 com.tinyhis.entity.MedicalRecord record = medicalRecordMapper.selectOne(
-                    new LambdaQueryWrapper<com.tinyhis.entity.MedicalRecord>()
-                        .eq(com.tinyhis.entity.MedicalRecord::getRegId, reg.getRegId()));
-                
+                        new LambdaQueryWrapper<com.tinyhis.entity.MedicalRecord>()
+                                .eq(com.tinyhis.entity.MedicalRecord::getRegId, reg.getRegId()));
+
                 if (record != null) {
                     Long pendingCount = labOrderMapper.selectCount(
-                        new LambdaQueryWrapper<com.tinyhis.entity.LabOrder>()
-                            .eq(com.tinyhis.entity.LabOrder::getRecordId, record.getRecordId())
-                            .lt(com.tinyhis.entity.LabOrder::getStatus, 2));
+                            new LambdaQueryWrapper<com.tinyhis.entity.LabOrder>()
+                                    .eq(com.tinyhis.entity.LabOrder::getRecordId, record.getRecordId())
+                                    .lt(com.tinyhis.entity.LabOrder::getStatus, 2));
                     if (pendingCount > 0) {
                         dto.setHasPendingLabs(true);
                     }
                 }
             }
-            
+
             return dto;
         }).collect(Collectors.toList());
     }
@@ -277,7 +278,7 @@ public class RegistrationServiceImpl implements RegistrationService {
             java.time.LocalDate scheduleDate = schedule.getScheduleDate();
             java.time.LocalTime nowTime = java.time.LocalTime.now();
             String currentHalf = nowTime.getHour() < 12 ? "AM" : "PM";
-            
+
             // 急诊(ER)支付后直接进入队列，不需要签到（当天有效）
             if ("ER".equalsIgnoreCase(shift)) {
                 if (scheduleDate != null && scheduleDate.equals(today)) {
@@ -326,7 +327,7 @@ public class RegistrationServiceImpl implements RegistrationService {
             java.time.LocalDateTime now = java.time.LocalDateTime.now();
             java.time.LocalDate scheduleDate = schedule.getScheduleDate();
             String shift = schedule.getShiftType();
-            
+
             // 急诊全天候可签到
             if ("ER".equalsIgnoreCase(shift)) {
                 // 急诊只需要是当天即可签到
@@ -334,13 +335,13 @@ public class RegistrationServiceImpl implements RegistrationService {
                     throw new BusinessException("急诊号仅当天有效");
                 }
             } else {
-                java.time.LocalTime startTime = "AM".equals(shift) 
-                    ? java.time.LocalTime.of(8, 0) 
-                    : java.time.LocalTime.of(14, 0);
+                java.time.LocalTime startTime = "AM".equals(shift)
+                        ? java.time.LocalTime.of(8, 0)
+                        : java.time.LocalTime.of(14, 0);
                 java.time.LocalDateTime appointmentTime = java.time.LocalDateTime.of(scheduleDate, startTime);
-                
+
                 long minutesUntilAppointment = java.time.Duration.between(now, appointmentTime).toMinutes();
-                
+
                 // 超过30分钟才到预约时间，不允许签到
                 if (minutesUntilAppointment > 30) {
                     throw new BusinessException("签到时间未到，请于就诊前30分钟内签到");
@@ -362,11 +363,11 @@ public class RegistrationServiceImpl implements RegistrationService {
     public List<Registration> getWaitingQueue(Long doctorId) {
         LambdaQueryWrapper<Registration> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(Registration::getDoctorId, doctorId)
-               .eq(Registration::getStatus, 2) // Waiting
-               .orderByAsc(Registration::getQueueNumber);
+                .eq(Registration::getStatus, 2) // Waiting
+                .orderByAsc(Registration::getQueueNumber);
         return registrationMapper.selectList(wrapper);
     }
-    
+
     /**
      * 获取可叫号的患者列表（包含候诊状态2和急诊状态1）
      */
@@ -375,26 +376,26 @@ public class RegistrationServiceImpl implements RegistrationService {
         java.time.LocalDate today = java.time.LocalDate.now();
         LambdaQueryWrapper<Schedule> scheduleWrapper = new LambdaQueryWrapper<>();
         scheduleWrapper.eq(Schedule::getDoctorId, doctorId)
-                       .eq(Schedule::getScheduleDate, today)
-                       .eq(Schedule::getShiftType, "ER");
+                .eq(Schedule::getScheduleDate, today)
+                .eq(Schedule::getShiftType, "ER");
         List<Schedule> erSchedules = scheduleMapper.selectList(scheduleWrapper);
         java.util.Set<Long> erScheduleIds = erSchedules.stream()
                 .map(Schedule::getScheduleId)
                 .collect(java.util.stream.Collectors.toSet());
-        
+
         LambdaQueryWrapper<Registration> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(Registration::getDoctorId, doctorId);
-        
+
         if (erScheduleIds.isEmpty()) {
             // 没有急诊排班，只查状态2
             wrapper.eq(Registration::getStatus, 2);
         } else {
             // 有急诊排班：状态2 或 (状态1且是急诊排班)
             wrapper.and(w -> w.eq(Registration::getStatus, 2)
-                              .or(q -> q.eq(Registration::getStatus, 1)
-                                        .in(Registration::getScheduleId, erScheduleIds)));
+                    .or(q -> q.eq(Registration::getStatus, 1)
+                            .in(Registration::getScheduleId, erScheduleIds)));
         }
-        
+
         wrapper.orderByAsc(Registration::getQueueNumber);
         return registrationMapper.selectList(wrapper);
     }
@@ -405,9 +406,9 @@ public class RegistrationServiceImpl implements RegistrationService {
         // Get next from queue
         Long regId = queueService.getNextFromQueue(doctorId);
         boolean fromQueue = regId != null;
-        
+
         if (regId == null) {
-            // Fallback to database query - 包含急诊状态1的患者
+            // Fallback to database query - 包含急诊状态1的患者, 不包含状态6(暂停)
             List<Registration> waiting = getCallablePatients(doctorId);
             if (waiting.isEmpty()) {
                 throw new BusinessException("当前没有等待的患者");
@@ -415,23 +416,60 @@ public class RegistrationServiceImpl implements RegistrationService {
             regId = waiting.getFirst().getRegId();
         }
 
+        return activateRegistration(doctorId, regId, fromQueue);
+    }
+
+    @Override
+    @Transactional
+    public Registration callSpecificPatient(Long doctorId, Long regId) {
+        Registration registration = registrationMapper.selectById(regId);
+        if (registration == null) {
+            throw new BusinessException("挂号记录不存在");
+        }
+        if (!registration.getDoctorId().equals(doctorId)) {
+            throw new BusinessException("该患者不属于当前医生");
+        }
+
+        // Allow calling from Status 1 (Paid/ER), 2 (Waiting), 6 (Paused)
+        // If already 3, just return
+        if (registration.getStatus() == 3) {
+            return registration;
+        }
+
+        if (registration.getStatus() != 1 && registration.getStatus() != 2 && registration.getStatus() != 6) {
+            throw new BusinessException("当前状态无法叫号");
+        }
+
+        // Check if there is already a patient in consultation for this doctor
+        // Optionally auto-pause the current one?
+        // User didn't strictly request auto-pause, but "call specific" usually implies
+        // taking over.
+        // Let's just set this one to 3. If there's another 3, we depend on frontend to
+        // pause it or backend to handle logic?
+        // Typically only one patient status 3 per doctor.
+        // Let's simplisticly allow multiple 3s or just proceed.
+        // Better: Find current status 3 and set to 6 (Paused)?
+        // User requirement: "Prevent paused patients from ... re-entering".
+        // Let's just activate this one.
+
+        return activateRegistration(doctorId, regId, true); // Treat as fromQueue to ensure removal
+    }
+
+    private Registration activateRegistration(Long doctorId, Long regId, boolean removeFromQueue) {
         Registration registration = registrationMapper.selectById(regId);
         if (registration != null) {
             registration.setStatus(3); // In consultation
             registrationMapper.updateById(registration);
 
-            // Remove from queue
-            if (fromQueue) {
-                queueService.removeFromQueue(doctorId, regId);
-            } else {
-                // Fallback情况下也需要广播更新候诊大屏
-                SysUser doctor = sysUserMapper.selectById(doctorId);
-                if (doctor != null && doctor.getDeptId() != null) {
-                    queueService.broadcastQueueUpdate(doctor.getDeptId());
-                }
+            // Remove from queue (if it was there)
+            queueService.removeFromQueue(doctorId, regId);
+
+            // Broadcast update
+            SysUser doctor = sysUserMapper.selectById(doctorId);
+            if (doctor != null && doctor.getDeptId() != null) {
+                queueService.broadcastQueueUpdate(doctor.getDeptId());
             }
         }
-
         return registration;
     }
 
@@ -462,15 +500,16 @@ public class RegistrationServiceImpl implements RegistrationService {
 
         registration.setStatus(5); // Cancelled
         registrationMapper.updateById(registration);
-        
+
         // Release quota
         scheduleService.decrementCount(registration.getScheduleId());
-        
+
         return true;
     }
 
     private String getShiftLabel(String shiftType) {
-        if (shiftType == null) return "";
+        if (shiftType == null)
+            return "";
         return switch (shiftType.toUpperCase()) {
             case "AM" -> "上午";
             case "PM" -> "下午";

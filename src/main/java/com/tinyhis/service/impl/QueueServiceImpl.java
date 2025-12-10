@@ -31,6 +31,7 @@ public class QueueServiceImpl implements QueueService {
     private final SysUserMapper sysUserMapper;
     private final DepartmentMapper departmentMapper;
     private final ScheduleMapper scheduleMapper;
+    private final ScheduleTemplateMapper scheduleTemplateMapper;
     private final ConsultingRoomMapper consultingRoomMapper;
 
     // In-memory queue for each doctor
@@ -38,7 +39,10 @@ public class QueueServiceImpl implements QueueService {
 
     @Override
     public void addToQueue(Long doctorId, Long regId) {
-        doctorQueues.computeIfAbsent(doctorId, k -> new ConcurrentLinkedQueue<>()).add(regId);
+        ConcurrentLinkedQueue<Long> queue = doctorQueues.computeIfAbsent(doctorId, k -> new ConcurrentLinkedQueue<>());
+        if (!queue.contains(regId)) {
+            queue.add(regId);
+        }
         
         // Get department and broadcast
         SysUser doctor = sysUserMapper.selectById(doctorId);
@@ -121,20 +125,38 @@ public class QueueServiceImpl implements QueueService {
                 // 获取诊室信息
                 Registration reg = current;
                 Schedule schedule = scheduleMapper.selectById(reg.getScheduleId());
-                System.out.println("Schedule fetched for current patient: " + schedule);
-
-
-                if (schedule != null && schedule.getRoomId() != null) {
-                    ConsultingRoom room = consultingRoomMapper.selectById(schedule.getRoomId());
-                    System.out.println("Consulting room fetched: " + room);
-                    if (room != null) {
-                        currentPatient.setRoomNumber(room.getRoomName());
-                    } else {
-                        currentPatient.setRoomNumber("诊室");
+                String roomName = "诊室";
+                
+                if (schedule != null) {
+                    Long roomId = schedule.getRoomId();
+                    
+                    // Fallback to template if roomId is null
+                    if (roomId == null) {
+                        try {
+                            int dayIndex = schedule.getScheduleDate().getDayOfWeek().getValue() - 1; // Monday=1 -> 0
+                            LambdaQueryWrapper<ScheduleTemplate> templateWrapper = new LambdaQueryWrapper<>();
+                            templateWrapper.eq(ScheduleTemplate::getDoctorId, schedule.getDoctorId())
+                                          .eq(ScheduleTemplate::getShiftType, schedule.getShiftType())
+                                          .eq(ScheduleTemplate::getDayOfWeek, dayIndex)
+                                          .last("LIMIT 1"); // Ensure single result
+                            ScheduleTemplate template = scheduleTemplateMapper.selectOne(templateWrapper);
+                            if (template != null) {
+                                roomId = template.getRoomId();
+                                System.out.println("Fallback to template room: " + roomId);
+                            }
+                        } catch (Exception e) {
+                            System.err.println("Error fetching schedule template: " + e.getMessage());
+                        }
                     }
-                } else {
-                    currentPatient.setRoomNumber("诊室");
+
+                    if (roomId != null) {
+                        ConsultingRoom room = consultingRoomMapper.selectById(roomId);
+                        if (room != null) {
+                            roomName = room.getRoomName();
+                        }
+                    }
                 }
+                currentPatient.setRoomNumber(roomName);
             }
 
             // Get waiting patients (status = 2 or status = 1 for ER)
@@ -171,6 +193,7 @@ public class QueueServiceImpl implements QueueService {
 
     @Override
     public void broadcastQueueUpdate(Long deptId) {
+        System.out.println("Broadcasting queue update for deptId: " + deptId);
         QueueInfo info = getQueueInfo(deptId);
         messagingTemplate.convertAndSend("/topic/queue/" + deptId, info);
     }

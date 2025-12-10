@@ -15,8 +15,8 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.time.Duration;
-import java.util.concurrent.TimeUnit;
+
+import org.springframework.context.annotation.Profile;
 
 /**
  * Async Consumer for Registration Queue
@@ -24,6 +24,7 @@ import java.util.concurrent.TimeUnit;
  */
 @Slf4j
 @Component
+@Profile("!test")
 @RequiredArgsConstructor
 public class RegistrationQueueConsumer {
 
@@ -43,7 +44,7 @@ public class RegistrationQueueConsumer {
     // 每 10ms 轮询一次队列，也可使用阻塞式 pop 循环以减少 CPU 空转
     // 出于实现简单性的考虑，当前使用 @Scheduled 调度；高吞吐场景建议在 @PostConstruct 启动一个循环线程或使用阻塞 pop
     // 当前实现使用简单的定时任务并按批次处理消息
-    
+
     @Scheduled(fixedDelayString = "${app.queue.poll-interval-ms:10}")
     public void processQueue() {
         try {
@@ -64,7 +65,7 @@ public class RegistrationQueueConsumer {
     public void processMessage(String message) {
         try {
             RegistrationRequest request = objectMapper.readValue(message, RegistrationRequest.class);
-            
+
             // 1. Get Schedule info (for doctorId)
             Schedule schedule = scheduleMapper.selectById(request.getScheduleId());
             if (schedule == null) {
@@ -78,24 +79,23 @@ public class RegistrationQueueConsumer {
             registration.setDoctorId(schedule.getDoctorId());
             registration.setScheduleId(request.getScheduleId());
             registration.setStatus(0); // Pending payment
-            // We can use the Redis quota count to determine queue number if we want strict ordering,
-            // but for now, let's just use current DB count + 1 or similar.
-            // Actually, since we are single-threaded consumer (or serialized), we can just count.
-            // But to be safe, let's just use a placeholder or query count.
-            // 更好的做法：如果在 Redis 中记录了排名，则可直接使用它来保证队列顺序；本工程未实现此逻辑
-            // Let's just set it to 0 or query DB.
-            registration.setQueueNumber(0); 
+            // 队列号 = 当前已挂号人数 + 1
+            // 由于消费者是单线程串行处理消息的，此处直接使用 currentCount + 1 是安全的
+            int queueNumber = schedule.getCurrentCount() + 1;
+            registration.setQueueNumber(queueNumber);
             registration.setFee(registrationFee);
-            
+
             registrationMapper.insert(registration);
 
-            // 3. Update Schedule Count (Direct SQL update, no optimistic lock needed as we are the authority now)
+            // 3. Update Schedule Count (Direct SQL update, no optimistic lock needed as we
+            // are the authority now)
             // We just increment it.
             // 注意：这里不需要再次检查配额（Redis 在前面已做原子性配额减扣），因此不会重复校验
             schedule.setCurrentCount(schedule.getCurrentCount() + 1);
             scheduleMapper.updateById(schedule);
-            
-            log.info("Async registration success: Patient {} for Schedule {}", request.getPatientId(), request.getScheduleId());
+
+            log.info("Async registration success: Patient {} for Schedule {}", request.getPatientId(),
+                    request.getScheduleId());
 
         } catch (Exception e) {
             log.error("Failed to process registration message: {}", message, e);

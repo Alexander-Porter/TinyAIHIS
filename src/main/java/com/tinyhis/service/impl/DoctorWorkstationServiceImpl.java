@@ -38,34 +38,32 @@ public class DoctorWorkstationServiceImpl implements DoctorWorkstationService {
         scheduleWrapper.eq(Schedule::getDoctorId, doctorId)
                 .eq(Schedule::getScheduleDate, today);
         List<Schedule> todaySchedules = scheduleMapper.selectList(scheduleWrapper);
-        
+
         if (todaySchedules.isEmpty()) {
             return new ArrayList<>();
         }
-        
+
         List<Long> scheduleIds = todaySchedules.stream().map(Schedule::getScheduleId).toList();
-        
+
         // 找出急诊排班的 scheduleId
-        Set<Long> erScheduleIds = todaySchedules.stream()
-                .filter(s -> "ER".equalsIgnoreCase(s.getShiftType()))
-                .map(Schedule::getScheduleId)
-                .collect(java.util.stream.Collectors.toSet());
-        
-        // Get ALL registrations for these schedules today (exclude cancelled and unpaid)
+
+        // Get ALL registrations for these schedules today (exclude cancelled and
+        // unpaid)
         // 状态 1=待签到, 2=候诊中, 3=就诊中, 4=已完成
         // 急诊的状态 1 也算候诊中（急诊无需签到，缴费后直接候诊）
         LambdaQueryWrapper<Registration> wrapper = new LambdaQueryWrapper<>();
-        
+
         // 获取今日该排班的所有患者（除了取消的和待缴费的）
         wrapper.in(Registration::getScheduleId, scheduleIds)
-               .in(Registration::getStatus, 1, 2, 3, 4); // 包含已完成的
-        
-        // 排序：就诊中(3)优先，然后候诊(1,2)，最后已完成(4)
-        // 使用 CASE WHEN 自定义排序: 3 -> 1, 1 -> 2, 2 -> 2, 4 -> 3
-        wrapper.last("ORDER BY CASE status WHEN 3 THEN 1 WHEN 1 THEN 2 WHEN 2 THEN 2 ELSE 3 END, queue_number ASC");
-        
+                .in(Registration::getStatus, 1, 2, 3, 4, 6); // 包含已完成的(4)和已暂停的(6)
+
+        // 排序：就诊中(3)优先，然后候诊(1,2)，然后暂停(6)，最后已完成(4)
+        // 使用 CASE WHEN 自定义排序: 3 -> 1, 1/2 -> 2, 6 -> 3, 4 -> 4
+        wrapper.last(
+                "ORDER BY CASE status WHEN 3 THEN 1 WHEN 1 THEN 2 WHEN 2 THEN 2 WHEN 6 THEN 3 ELSE 4 END, queue_number ASC");
+
         List<Registration> registrations = registrationMapper.selectList(wrapper);
-        
+
         // Convert to detailed DTOs
         return registrations.stream()
                 .map(reg -> buildVisitDetailDTO(reg, true))
@@ -86,16 +84,16 @@ public class DoctorWorkstationServiceImpl implements DoctorWorkstationService {
         // Get completed registrations for this patient
         LambdaQueryWrapper<Registration> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(Registration::getPatientId, patientId)
-               .eq(Registration::getStatus, 4); // Completed
-        
+                .eq(Registration::getStatus, 4); // Completed
+
         if (doctorId != null) {
             wrapper.eq(Registration::getDoctorId, doctorId);
         }
-        
+
         wrapper.orderByDesc(Registration::getCreateTime);
-        
+
         List<Registration> registrations = registrationMapper.selectList(wrapper);
-        
+
         return registrations.stream()
                 .map(reg -> buildVisitDetailDTO(reg, false))
                 .toList();
@@ -108,14 +106,14 @@ public class DoctorWorkstationServiceImpl implements DoctorWorkstationService {
         if (registration == null) {
             throw new BusinessException("挂号记录不存在");
         }
-        
+
         if (registration.getStatus() != 3) {
             throw new BusinessException("只有就诊中的患者可以暂停");
         }
-        
-        registration.setStatus(2); // Back to waiting
+
+        registration.setStatus(6); // Set to Paused
         registrationMapper.updateById(registration);
-        
+
         log.info("Paused consultation for registration {}", regId);
         return registration;
     }
@@ -127,21 +125,21 @@ public class DoctorWorkstationServiceImpl implements DoctorWorkstationService {
         if (registration == null) {
             throw new BusinessException("挂号记录不存在");
         }
-        
-        if (registration.getStatus() != 2) {
-            throw new BusinessException("只有候诊中的患者可以恢复就诊");
+
+        if (registration.getStatus() != 2 && registration.getStatus() != 6) {
+            throw new BusinessException("只有候诊中或暂停的患者可以恢复就诊");
         }
-        
+
         registration.setStatus(3); // In consultation
         registrationMapper.updateById(registration);
-        
+
         log.info("Resumed consultation for registration {}", regId);
         return registration;
     }
-    
+
     private VisitDetailDTO buildVisitDetailDTO(Registration reg, boolean isToday) {
         VisitDetailDTO dto = new VisitDetailDTO();
-        
+
         // Copy registration info
         dto.setRegId(reg.getRegId());
         dto.setPatientId(reg.getPatientId());
@@ -152,7 +150,7 @@ public class DoctorWorkstationServiceImpl implements DoctorWorkstationService {
         dto.setFee(reg.getFee());
         dto.setCreateTime(reg.getCreateTime());
         dto.setIsToday(isToday);
-        
+
         // Get patient info
         PatientInfo patient = patientInfoMapper.selectById(reg.getPatientId());
         if (patient != null) {
@@ -162,13 +160,13 @@ public class DoctorWorkstationServiceImpl implements DoctorWorkstationService {
             dto.setIdCard(patient.getIdCard());
             dto.setAge(patient.getAge());
         }
-        
+
         // Get schedule info
         Schedule schedule = scheduleMapper.selectById(reg.getScheduleId());
         if (schedule != null) {
             dto.setScheduleDate(schedule.getScheduleDate().toString());
             dto.setShiftType(schedule.getShiftType());
-            
+
             // Get consulting room info
             if (schedule.getRoomId() != null) {
                 ConsultingRoom room = consultingRoomMapper.selectById(schedule.getRoomId());
@@ -178,12 +176,12 @@ public class DoctorWorkstationServiceImpl implements DoctorWorkstationService {
                     dto.setRoomLocation(room.getLocation());
                 }
             }
-            
+
             // Get doctor info
             SysUser doctor = sysUserMapper.selectById(schedule.getDoctorId());
             if (doctor != null) {
                 dto.setDoctorName(doctor.getRealName());
-                
+
                 // Get department info
                 if (doctor.getDeptId() != null) {
                     Department dept = departmentMapper.selectById(doctor.getDeptId());
@@ -193,13 +191,13 @@ public class DoctorWorkstationServiceImpl implements DoctorWorkstationService {
                 }
             }
         }
-        
+
         // Get medical record for this visit
         LambdaQueryWrapper<MedicalRecord> recordWrapper = new LambdaQueryWrapper<>();
         recordWrapper.eq(MedicalRecord::getRegId, reg.getRegId());
         MedicalRecord record = medicalRecordMapper.selectOne(recordWrapper);
         dto.setMedicalRecord(record);
-        
+
         // Get prescriptions and lab orders if medical record exists
         if (record != null) {
             dto.setPrescriptions(emrService.getPrescriptionDetails(record.getRecordId()));
@@ -208,16 +206,18 @@ public class DoctorWorkstationServiceImpl implements DoctorWorkstationService {
             dto.setPrescriptions(new ArrayList<>());
             dto.setLabOrders(new ArrayList<>());
         }
-        
+
         return dto;
     }
-    
+
     private boolean isToday(Registration reg) {
-        if (reg.getScheduleId() == null) return false;
-        
+        if (reg.getScheduleId() == null)
+            return false;
+
         Schedule schedule = scheduleMapper.selectById(reg.getScheduleId());
-        if (schedule == null) return false;
-        
+        if (schedule == null)
+            return false;
+
         return LocalDate.now().equals(schedule.getScheduleDate());
     }
 }

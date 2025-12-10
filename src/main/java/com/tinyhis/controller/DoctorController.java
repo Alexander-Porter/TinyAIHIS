@@ -4,7 +4,6 @@ import com.tinyhis.dto.Result;
 import com.tinyhis.dto.VisitDetailDTO;
 import com.tinyhis.entity.Registration;
 import com.tinyhis.service.DoctorWorkstationService;
-import com.tinyhis.service.QueueService;
 import com.tinyhis.service.RegistrationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
@@ -20,7 +19,6 @@ import java.util.List;
 public class DoctorController {
 
     private final RegistrationService registrationService;
-    private final QueueService queueService;
     private final DoctorWorkstationService doctorWorkstationService;
 
     /**
@@ -31,16 +29,17 @@ public class DoctorController {
         List<Registration> queue = registrationService.getWaitingQueue(doctorId);
         return Result.success(queue);
     }
-    
+
     /**
-     * Get all active patients for doctor today (status 2,3 = checked in or in consultation)
+     * Get all active patients for doctor today (status 2,3 = checked in or in
+     * consultation)
      */
     @GetMapping("/patients/{doctorId}")
     public Result<List<VisitDetailDTO>> getTodayPatients(@PathVariable Long doctorId) {
         List<VisitDetailDTO> patients = doctorWorkstationService.getTodayPatients(doctorId);
         return Result.success(patients);
     }
-    
+
     /**
      * Get complete visit detail for a specific registration
      */
@@ -49,7 +48,7 @@ public class DoctorController {
         VisitDetailDTO detail = doctorWorkstationService.getVisitDetail(regId);
         return Result.success(detail);
     }
-    
+
     /**
      * Get patient's visit history (past visits with this doctor)
      */
@@ -60,7 +59,7 @@ public class DoctorController {
         List<VisitDetailDTO> history = doctorWorkstationService.getPatientHistory(patientId, doctorId);
         return Result.success(history);
     }
-    
+
     /**
      * Pause current consultation (patient needs to do lab tests)
      * Changes status from 3 (in consultation) back to 2 (waiting)
@@ -87,6 +86,15 @@ public class DoctorController {
     @PostMapping("/callNext/{doctorId}")
     public Result<Registration> callNext(@PathVariable Long doctorId) {
         Registration registration = registrationService.callNext(doctorId);
+        return Result.success(registration);
+    }
+
+    /**
+     * Call specific patient
+     */
+    @PostMapping("/call/{doctorId}/{regId}")
+    public Result<Registration> callSpecificPatient(@PathVariable Long doctorId, @PathVariable Long regId) {
+        Registration registration = registrationService.callSpecificPatient(doctorId, regId);
         return Result.success(registration);
     }
 

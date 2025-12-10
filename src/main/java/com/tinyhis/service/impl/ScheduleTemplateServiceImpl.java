@@ -26,6 +26,81 @@ public class ScheduleTemplateServiceImpl extends ServiceImpl<ScheduleTemplateMap
 
     private final ScheduleTemplateMapper templateMapper;
     private final ScheduleMapper scheduleMapper;
+    private final com.tinyhis.mapper.ConsultingRoomMapper consultingRoomMapper;
+    private final com.fasterxml.jackson.databind.ObjectMapper objectMapper = new com.fasterxml.jackson.databind.ObjectMapper();
+
+    @Override
+    @Transactional
+    public void saveScheduleTemplate(ScheduleTemplate template) {
+        // Validate Room
+        if (template.getRoomId() != null) {
+            com.tinyhis.entity.ConsultingRoom room = consultingRoomMapper.selectById(template.getRoomId());
+            if (room == null) {
+                throw new IllegalArgumentException("指定的诊室不存在");
+            }
+            if (org.springframework.util.StringUtils.hasText(room.getDeptIds())) {
+                try {
+                    java.util.List<Long> allowedDeptIds = objectMapper.readValue(room.getDeptIds(), 
+                        new com.fasterxml.jackson.core.type.TypeReference<java.util.List<Long>>(){});
+                    if (!allowedDeptIds.contains(template.getDeptId())) {
+                        throw new IllegalArgumentException("该诊室不属于当前科室，无法分配");
+                    }
+                } catch (Exception e) {
+                    log.warn("Failed to parse room deptIds: {}", room.getDeptIds());
+                }
+            }
+        }
+
+        template.setUpdateTime(LocalDateTime.now());
+        if (template.getTemplateId() == null) {
+            template.setStatus(1);
+            template.setCreateTime(LocalDateTime.now());
+            templateMapper.insert(template);
+        } else {
+            templateMapper.updateById(template);
+        }
+
+        // Generate schedule for next 14 days
+        LocalDate today = LocalDate.now();
+        LocalDate endDate = today.plusDays(14);
+        generateScheduleForTemplateInternal(template, today, endDate);
+    }
+    
+    private void generateScheduleForTemplateInternal(ScheduleTemplate template, LocalDate startDate, LocalDate endDate) {
+        LocalDate current = startDate;
+        while (!current.isAfter(endDate)) {
+            // dayOfWeek: 0=Monday, 1=Tuesday, ..., 6=Sunday
+            int dayIndex = current.getDayOfWeek().getValue() - 1;
+            
+            if (template.getDayOfWeek() == dayIndex) {
+                final LocalDate scheduleDate = current;
+                // Check if schedule already exists
+                LambdaQueryWrapper<Schedule> existsWrapper = new LambdaQueryWrapper<>();
+                existsWrapper.eq(Schedule::getDoctorId, template.getDoctorId())
+                            .eq(Schedule::getScheduleDate, scheduleDate)
+                            .eq(Schedule::getShiftType, template.getShiftType());
+                
+                if (scheduleMapper.selectCount(existsWrapper) == 0) {
+                    // Create new schedule
+                    Schedule schedule = new Schedule();
+                    schedule.setDeptId(template.getDeptId());
+                    schedule.setDoctorId(template.getDoctorId());
+                    schedule.setScheduleDate(scheduleDate);
+                    schedule.setShiftType(template.getShiftType());
+                    schedule.setMaxQuota(template.getMaxQuota());
+                    schedule.setCurrentCount(0);
+                    schedule.setStatus(1);
+                    schedule.setVersion(0);
+                    schedule.setRoomId(template.getRoomId()); // Set room from template
+                    schedule.setCreateTime(LocalDateTime.now());
+                    schedule.setUpdateTime(LocalDateTime.now());
+                    
+                    scheduleMapper.insert(schedule);
+                }
+            }
+            current = current.plusDays(1);
+        }
+    }
 
     @Override
     public List<ScheduleTemplate> getTemplatesByDept(Long deptId) {

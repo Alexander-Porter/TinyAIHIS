@@ -21,6 +21,11 @@ public interface ScheduleTemplateService extends IService<ScheduleTemplate> {
     int generateSchedulesFromTemplates(LocalDate startDate, LocalDate endDate);
     
     /**
+     * Save schedule template with validation
+     */
+    void saveScheduleTemplate(ScheduleTemplate template);
+
+    /**
      * Generate schedules for next week based on templates
      */
     int generateNextWeekSchedules();

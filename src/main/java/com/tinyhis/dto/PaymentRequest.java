@@ -1,7 +1,6 @@
 package com.tinyhis.dto;
 
 import lombok.Data;
-import java.math.BigDecimal;
 import java.util.List;
 
 /**
@@ -13,7 +12,7 @@ public class PaymentRequest {
      * Payment type: REGISTRATION, PRESCRIPTION, LAB
      */
     private String paymentType;
-    
+
     /**
      * Item IDs to pay for
      */

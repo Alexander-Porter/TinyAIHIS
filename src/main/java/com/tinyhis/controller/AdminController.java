@@ -16,7 +16,9 @@ import com.tinyhis.mapper.ScheduleTemplateMapper;
 import com.tinyhis.mapper.SysUserMapper;
 import com.tinyhis.service.DataQueryService;
 import com.tinyhis.service.ExcelService;
+import com.tinyhis.service.ExcelService;
 import com.tinyhis.service.ScheduleTemplateService;
+import com.tinyhis.service.DashboardService;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -50,9 +52,10 @@ public class AdminController {
     private final ScheduleTemplateService scheduleTemplateService;
     private final ScheduleMapper scheduleMapper;
     private final DataQueryService dataQueryService;
+    private final DashboardService dashboardService;
 
     // ==================== User Management ====================
-    
+
     /**
      * Get users with pagination and filters
      */
@@ -62,7 +65,7 @@ public class AdminController {
             @RequestParam(defaultValue = "10") int size,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String role) {
-        
+
         LambdaQueryWrapper<SysUser> wrapper = new LambdaQueryWrapper<>();
         if (StringUtils.hasText(keyword)) {
             wrapper.and(w -> w.like(SysUser::getUsername, keyword)
@@ -72,15 +75,15 @@ public class AdminController {
             wrapper.eq(SysUser::getRole, role);
         }
         wrapper.orderByDesc(SysUser::getCreateTime);
-        
+
         Page<SysUser> pageResult = sysUserMapper.selectPage(new Page<>(page, size), wrapper);
-        
+
         // Join department names
         List<SysUser> users = pageResult.getRecords();
         List<Department> depts = departmentMapper.selectList(null);
         Map<Long, String> deptMap = new HashMap<>();
         depts.forEach(d -> deptMap.put(d.getDeptId(), d.getDeptName()));
-        
+
         List<Map<String, Object>> userList = users.stream().map(u -> {
             Map<String, Object> map = new HashMap<>();
             map.put("userId", u.getUserId());
@@ -94,13 +97,13 @@ public class AdminController {
             map.put("createTime", u.getCreateTime());
             return map;
         }).toList();
-        
+
         Map<String, Object> result = new HashMap<>();
         result.put("list", userList);
         result.put("total", pageResult.getTotal());
         return Result.success(result);
     }
-    
+
     /**
      * Save user (create or update)
      */
@@ -130,7 +133,7 @@ public class AdminController {
         }
         return Result.success(user);
     }
-    
+
     /**
      * Update user status
      */
@@ -143,7 +146,7 @@ public class AdminController {
         }
         return Result.success(true);
     }
-    
+
     /**
      * Delete user
      */
@@ -154,7 +157,7 @@ public class AdminController {
     }
 
     // ==================== Department Management ====================
-    
+
     /**
      * Save department (create or update)
      */
@@ -168,7 +171,7 @@ public class AdminController {
         }
         return Result.success(dept);
     }
-    
+
     /**
      * Update department status
      */
@@ -181,7 +184,7 @@ public class AdminController {
         }
         return Result.success(true);
     }
-    
+
     /**
      * Delete department
      */
@@ -192,7 +195,7 @@ public class AdminController {
     }
 
     // ==================== Statistics ====================
-    
+
     /**
      * Get dashboard statistics
      */
@@ -209,7 +212,7 @@ public class AdminController {
     }
 
     // ==================== Drug Import/Export ====================
-    
+
     /**
      * Import drugs from Excel file
      */
@@ -235,7 +238,7 @@ public class AdminController {
     @GetMapping("/schedule-templates")
     public Result<List<Map<String, Object>>> getScheduleTemplates(@RequestParam Long deptId) {
         List<ScheduleTemplate> templates = scheduleTemplateService.getTemplatesByDept(deptId);
-        
+
         // Get doctor names
         List<Long> doctorIds = templates.stream()
                 .map(ScheduleTemplate::getDoctorId)
@@ -247,7 +250,7 @@ public class AdminController {
             wrapper.in(SysUser::getUserId, doctorIds);
             sysUserMapper.selectList(wrapper).forEach(u -> doctorNames.put(u.getUserId(), u.getRealName()));
         }
-        
+
         // Get room names
         List<Long> roomIds = templates.stream()
                 .map(ScheduleTemplate::getRoomId)
@@ -260,7 +263,7 @@ public class AdminController {
             roomWrapper.in(ConsultingRoom::getRoomId, roomIds);
             consultingRoomMapper.selectList(roomWrapper).forEach(r -> roomNames.put(r.getRoomId(), r.getRoomName()));
         }
-        
+
         List<Map<String, Object>> result = templates.stream().map(t -> {
             Map<String, Object> map = new HashMap<>();
             map.put("templateId", t.getTemplateId());
@@ -275,7 +278,7 @@ public class AdminController {
             map.put("status", t.getStatus());
             return map;
         }).collect(Collectors.toList());
-        
+
         return Result.success(result);
     }
 
@@ -285,59 +288,11 @@ public class AdminController {
      */
     @PostMapping("/schedule-template/save")
     public Result<ScheduleTemplate> saveScheduleTemplate(@RequestBody ScheduleTemplate template) {
-        template.setUpdateTime(LocalDateTime.now());
-        if (template.getTemplateId() == null) {
-            template.setStatus(1);
-            template.setCreateTime(LocalDateTime.now());
-            scheduleTemplateMapper.insert(template);
-        } else {
-            scheduleTemplateMapper.updateById(template);
-        }
-        
-        // 保存模板后，自动生成未来14天的排班记录
-        LocalDate today = LocalDate.now();
-        LocalDate endDate = today.plusDays(14);
-        generateScheduleForTemplate(template, today, endDate);
-        
-        return Result.success(template);
-    }
-    
-    /**
-     * Generate schedule records for a specific template within date range
-     */
-    private void generateScheduleForTemplate(ScheduleTemplate template, LocalDate startDate, LocalDate endDate) {
-        LocalDate current = startDate;
-        while (!current.isAfter(endDate)) {
-            // dayOfWeek: 0=Monday, 1=Tuesday, ..., 6=Sunday
-            int dayIndex = current.getDayOfWeek().getValue() - 1;
-            
-            if (template.getDayOfWeek() == dayIndex) {
-                final LocalDate scheduleDate = current;
-                // Check if schedule already exists
-                LambdaQueryWrapper<Schedule> existsWrapper = new LambdaQueryWrapper<>();
-                existsWrapper.eq(Schedule::getDoctorId, template.getDoctorId())
-                            .eq(Schedule::getScheduleDate, scheduleDate)
-                            .eq(Schedule::getShiftType, template.getShiftType());
-                
-                if (scheduleMapper.selectCount(existsWrapper) == 0) {
-                    // Create new schedule
-                    Schedule schedule = new Schedule();
-                    schedule.setDeptId(template.getDeptId());
-                    schedule.setDoctorId(template.getDoctorId());
-                    schedule.setScheduleDate(scheduleDate);
-                    schedule.setShiftType(template.getShiftType());
-                    schedule.setMaxQuota(template.getMaxQuota());
-                    schedule.setCurrentCount(0);
-                    schedule.setStatus(1);
-                    schedule.setVersion(0);
-                    schedule.setRoomId(template.getRoomId()); // Set room from template
-                    schedule.setCreateTime(LocalDateTime.now());
-                    schedule.setUpdateTime(LocalDateTime.now());
-                    
-                    scheduleMapper.insert(schedule);
-                }
-            }
-            current = current.plusDays(1);
+        try {
+            scheduleTemplateService.saveScheduleTemplate(template);
+            return Result.success(template);
+        } catch (IllegalArgumentException e) {
+            return Result.error(e.getMessage());
         }
     }
 
@@ -357,12 +312,12 @@ public class AdminController {
     public Result<Map<String, Object>> generateWeekSchedules(@RequestBody Map<String, String> params) {
         String startDateStr = params.get("startDate");
         String endDateStr = params.get("endDate");
-        
+
         LocalDate startDate = LocalDate.parse(startDateStr, DateTimeFormatter.ISO_DATE);
         LocalDate endDate = LocalDate.parse(endDateStr, DateTimeFormatter.ISO_DATE);
-        
+
         int count = scheduleTemplateService.generateSchedulesFromTemplates(startDate, endDate);
-        
+
         Map<String, Object> result = new HashMap<>();
         result.put("generated", count);
         result.put("startDate", startDate);
@@ -378,19 +333,19 @@ public class AdminController {
             @RequestParam Long deptId,
             @RequestParam String startDate,
             @RequestParam String endDate) {
-        
+
         LocalDate start = LocalDate.parse(startDate, DateTimeFormatter.ISO_DATE);
         LocalDate end = LocalDate.parse(endDate, DateTimeFormatter.ISO_DATE);
-        
+
         LambdaQueryWrapper<Schedule> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(Schedule::getDeptId, deptId)
-               .ge(Schedule::getScheduleDate, start)
-               .le(Schedule::getScheduleDate, end)
-               .orderByAsc(Schedule::getScheduleDate)
-               .orderByAsc(Schedule::getShiftType);
-        
+                .ge(Schedule::getScheduleDate, start)
+                .le(Schedule::getScheduleDate, end)
+                .orderByAsc(Schedule::getScheduleDate)
+                .orderByAsc(Schedule::getShiftType);
+
         List<Schedule> schedules = scheduleMapper.selectList(wrapper);
-        
+
         // Get doctor names
         List<Long> doctorIds = schedules.stream()
                 .map(Schedule::getDoctorId)
@@ -402,7 +357,7 @@ public class AdminController {
             userWrapper.in(SysUser::getUserId, doctorIds);
             sysUserMapper.selectList(userWrapper).forEach(u -> doctorNames.put(u.getUserId(), u.getRealName()));
         }
-        
+
         List<Map<String, Object>> result = schedules.stream().map(s -> {
             Map<String, Object> map = new HashMap<>();
             map.put("scheduleId", s.getScheduleId());
@@ -416,7 +371,7 @@ public class AdminController {
             map.put("status", s.getStatus());
             return map;
         }).collect(Collectors.toList());
-        
+
         return Result.success(result);
     }
 
@@ -436,7 +391,7 @@ public class AdminController {
      */
     @GetMapping("/dashboard-stats")
     public Result<Map<String, Object>> getDashboardStats() {
-        return Result.success(dataQueryService.getDashboardStats());
+        return Result.success(dashboardService.getDashboardStats());
     }
 
     /**
@@ -456,9 +411,9 @@ public class AdminController {
             @RequestParam(required = false) Integer status,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false, defaultValue = "false") boolean excludeChief) {
-        
+
         Map<String, Object> result = dataQueryService.queryData(
-            type, page, size, startDate, endDate, deptId, doctorId, role, drugId, status, keyword, excludeChief);
+                type, page, size, startDate, endDate, deptId, doctorId, role, drugId, status, keyword, excludeChief);
         return Result.success(result);
     }
 
@@ -478,12 +433,13 @@ public class AdminController {
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false, defaultValue = "false") boolean excludeChief,
             HttpServletResponse response) {
-        
-        dataQueryService.exportData(type, startDate, endDate, deptId, doctorId, role, drugId, status, keyword, excludeChief, response);
+
+        dataQueryService.exportData(type, startDate, endDate, deptId, doctorId, role, drugId, status, keyword,
+                excludeChief, response);
     }
-    
+
     // ==================== Consulting Room Management ====================
-    
+
     /**
      * Get all consulting rooms
      */
@@ -494,7 +450,7 @@ public class AdminController {
         List<ConsultingRoom> rooms = consultingRoomMapper.selectList(wrapper);
         return Result.success(rooms);
     }
-    
+
     /**
      * Get consulting room by ID
      */
@@ -503,7 +459,7 @@ public class AdminController {
         ConsultingRoom room = consultingRoomMapper.selectById(roomId);
         return Result.success(room);
     }
-    
+
     /**
      * Create or update consulting room
      */
@@ -516,7 +472,7 @@ public class AdminController {
         }
         return Result.success(room);
     }
-    
+
     /**
      * Delete consulting room
      */

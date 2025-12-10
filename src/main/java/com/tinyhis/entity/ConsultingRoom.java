@@ -25,6 +25,11 @@ public class ConsultingRoom {
     
     private String description;
     
+    /**
+     * JSON array of allowed department IDs, e.g. "[1, 2]"
+     */
+    private String deptIds;
+    
     private Integer status;
     
     private LocalDateTime createTime;
