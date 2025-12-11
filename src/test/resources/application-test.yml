@@ -6,16 +6,26 @@ spring:
     driver-class-name: org.h2.Driver
   jpa:
     hibernate:
-      ddl-auto: create-drop
+      ddl-auto: none
   sql:
     init:
-      mode: always
+      mode: embedded
       schema-locations: classpath:schema.sql
       data-locations: classpath:data.sql
+  # Disable task scheduling in tests
+  task:
+    scheduling:
+      enabled: false
 
 # Disable real Redis by pointing to nothing or we will mock the template
 # But for @SpringBootTest without a real Redis, it might fail to start if it tries to connect.
 # We will use @MockBean for RedisTemplate in the test class.
+
+# SiliconFlow configuration for testing
+siliconflow:
+  api-key: ${SILICONFLOW_API_KEY:}
+  model: ${SILICONFLOW_MODEL:deepseek-ai/DeepSeek-V3.2}
+  api-url: ${SILICONFLOW_API_URL:https://api.siliconflow.cn/v1}
 
 medical:
   knowledge:
