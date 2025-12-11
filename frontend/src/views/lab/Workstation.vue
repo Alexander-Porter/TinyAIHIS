@@ -117,7 +117,7 @@ import { labApi } from '@/utils/api'
 import '@wangeditor/editor/dist/css/style.css'
 import { Editor, Toolbar } from '@wangeditor/editor-for-vue'
 
-// State
+// 状态
 const orders = ref([])
 const currentOrder = ref(null)
 const submitting = ref(false)
@@ -125,7 +125,7 @@ const filterStatus = ref('pending')
 const resultHtml = ref('')
 const uploadedImages = computed(() => parseImages(currentOrder.value?.resultImages))
 
-// Editor
+// 编辑器
 const editorRef = shallowRef()
 const toolbarConfig = {
   excludeKeys: ['uploadVideo', 'insertVideo', 'group-video']
@@ -147,7 +147,7 @@ editorConfig.MENU_CONF.uploadImage = {
   }
 }
 
-// Table columns
+// 表格列
 const columns = [
   { title: '#', dataIndex: 'orderId', key: 'orderId', width: 50 },
   { title: '患者', key: 'patientInfo', width: 90 },
@@ -156,7 +156,7 @@ const columns = [
   { title: '', key: 'action', width: 70 }
 ]
 
-// Computed
+// 计算属性
 const filteredOrders = computed(() => {
   if (filterStatus.value === 'all') return orders.value
   if (filterStatus.value === 'pending') return orders.value.filter(o => o.status === 1)
@@ -164,7 +164,7 @@ const filteredOrders = computed(() => {
   return orders.value
 })
 
-// Lifecycle
+// 生命周期
 onMounted(() => {
   loadOrders()
 })
@@ -175,7 +175,7 @@ onBeforeUnmount(() => {
   }
 })
 
-// Methods
+// 方法
 const handleCreated = (editor) => {
   editorRef.value = editor
 }
@@ -237,7 +237,7 @@ const submitResult = async () => {
   }
 }
 
-// Templates
+// 模板
 const templates = {
   normal: `
     <h3>检验报告</h3>

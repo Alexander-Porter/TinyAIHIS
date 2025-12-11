@@ -6,7 +6,7 @@
 
     <div class="login-container">
       <div class="brand-section">
-        <img src="@/assets/logo_with_slogan.png" alt="TinyHIS - Caring for Life" class="brand-logo" />
+        <img src="@/assets/logo_with_slogan.png" alt="TinyAIHIS - Caring for Life" class="brand-logo" />
         <p class="brand-welcome">欢迎回来，即刻开启您的健康管理之旅</p>
       </div>
 

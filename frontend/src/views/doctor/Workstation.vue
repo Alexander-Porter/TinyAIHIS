@@ -457,26 +457,51 @@ const currentPatientInfo = computed(() => {
 // Common lab items for autocomplete
 const commonLabItems = ref([])
 
-// Lifecycle
-const openAiAssistant = () => {
-  // Build initial query from current EMR
-  let query = ''
-  if (emrForm.symptom) query += `主诉：${emrForm.symptom}\n`
-  if (emrForm.content) query += `现病史：${emrForm.content}\n`
-  if (emrForm.diagnosis) query += `初步诊断：${emrForm.diagnosis}\n`
 
-  if (!query) {
-    query = '患者刚入院，请协助问诊。'
-  }
-
-  aiInitialQuery.value = query
-  aiDrawerVisible.value = true
-}
 
 const applyAiSuggestion = (content) => {
-  // Simple append for now
-  emrForm.content += '\n\n' + content
-  message.success('已引用到病历')
+  // If the doctor selected any text inside the AI chat, prefer that selection;
+  // otherwise, fall back to the provided content (whole suggestion).
+  let toInsert = content || ''
+  try {
+    const selection = window.getSelection()
+    if (selection && !selection.isCollapsed) {
+      const selectedText = selection.toString().trim()
+      if (selectedText) {
+        // Ensure the selection is inside the AI chat panel to avoid unexpected behavior
+        let node = selection.anchorNode instanceof Node ? selection.anchorNode : null
+        let el = node && node.parentElement ? node.parentElement : null
+        while (el && !el.classList.contains('doctor-ai-chat')) {
+          el = el.parentElement
+        }
+        if (el) {
+          toInsert = selectedText
+        }
+      }
+    }
+  } catch (e) {
+    // ignore selection errors and fall back to content
+    console.error('Selection check failed', e)
+  }
+
+  // Insert into diagnosis field of EMR (append if there is already content)
+  if (toInsert) {
+    if (emrForm.diagnosis && emrForm.diagnosis.trim()) {
+      emrForm.diagnosis = emrForm.diagnosis.trim() + '\n' + toInsert
+    } else {
+      emrForm.diagnosis = toInsert
+    }
+
+    // Also update template data which backs the EmrEditor v-model
+    emrTemplateData.value = {
+      ...emrTemplateData.value,
+      diagnosis: emrForm.diagnosis
+    }
+
+    message.success('已插入到诊断字段')
+  } else {
+    message.info('没有可插入的文本')
+  }
 }
 
 // Knowledge search handlers

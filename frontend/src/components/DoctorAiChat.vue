@@ -205,14 +205,19 @@ const sendMessage = async (text = null) => {
             } catch (e) {
               console.error('Failed to parse tool_call', e)
             }
-          } else if (currentEvent === 'tool') {
-            messages.value.push({
-              role: 'assistant',
-              type: 'tool',
-              content: data
-            })
+          } else if (currentEvent === 'tool_call') {
+            const lastMsg = messages.value[messages.value.length - 1]
+            if (lastMsg && lastMsg.type === 'tool') {
+              lastMsg.content += data
+            } else {
+              messages.value.push({
+                role: 'assistant',
+                type: 'tool',
+                content: data
+              })
+            }
           } else if (currentEvent === 'thought') {
-            let lastMsg = messages.value[messages.value.length - 1]
+            const lastMsg = messages.value[messages.value.length - 1]
             if (lastMsg && lastMsg.type === 'thought') {
               lastMsg.content += data
             } else {
@@ -224,13 +229,13 @@ const sendMessage = async (text = null) => {
               })
             }
           } else if (currentEvent === 'message') {
+            const lastMsg = messages.value[messages.value.length - 1]
+            // 只有当上一条消息是文本且是助手发的，才追加内容
+            // 关键修改：如果上一条是 tool_call，这里会进入 else 分支创建新气泡
             if (lastMsg && lastMsg.type === 'text' && lastMsg.role === 'assistant') {
               lastMsg.content += data
             } else {
-              // If starting a new message bubble, ignore leading whitespace/newlines
-              // to prevent "air bubbles" (empty message bubbles)
-              if (!data.trim()) return
-
+              // 即使是空白字符也创建气泡，防止首字丢失
               messages.value.push({
                 role: 'assistant',
                 type: 'text',

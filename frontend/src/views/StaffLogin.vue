@@ -2,7 +2,7 @@
   <div class="staff-login">
     <div class="login-box">
       <div class="logo"></div>
-      <h1>TinyHIS 工作站登录</h1>
+      <h1>TinyAIHIS 工作站登录</h1>
       
       <div v-if="isDemo" class="demo-selector">
         <a-alert message="演示模式已开启" type="info" show-icon style="margin-bottom: 16px" />
