@@ -12,4 +12,5 @@ public class PrescriptionDetailDTO extends Prescription {
     private String drugSpec; // Specification
     private BigDecimal unitPrice;
     private BigDecimal totalPrice;
+    private String patientName;
 }

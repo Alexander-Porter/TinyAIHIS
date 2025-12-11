@@ -59,7 +59,7 @@ class PatientJourneyTest {
     @Test
     @Order(1)
     void testRegistration() {
-        // Mock Redis
+        // 模拟Redis环境
         ListOperations listOps = mock(ListOperations.class);
         ValueOperations valueOps = mock(ValueOperations.class);
 
@@ -74,11 +74,11 @@ class PatientJourneyTest {
         Registration dummy = registrationService.createRegistration(req);
         assertNotNull(dummy);
 
-        // Simulating Async Consumer: Manually insert record into DB
+        // 模拟异步消费者：手动将记录插入数据库
         Registration realReg = new Registration();
         realReg.setPatientId(1L);
         realReg.setScheduleId(1L);
-        realReg.setDoctorId(dummy.getDoctorId()); // 2L from schedule 1
+        realReg.setDoctorId(dummy.getDoctorId()); // 从排班1获取的医生ID
         realReg.setStatus(0);
         realReg.setFee(new BigDecimal("50.00"));
         realReg.setQueueNumber(1);
@@ -92,15 +92,15 @@ class PatientJourneyTest {
     @Test
     @Order(2)
     void testPaymentAndCheckIn() {
-        assertNotNull(regId, "Registration ID should be set");
+        assertNotNull(regId, "挂号ID应该被设置");
 
-        // Mock Redis for queue operations (addToQueue)
+        // 为队列操作模拟Redis环境（添加到队列）
         ListOperations listOps = mock(ListOperations.class);
         when(redisTemplate.opsForList()).thenReturn(listOps);
         ValueOperations valueOps = mock(ValueOperations.class);
         when(redisTemplate.opsForValue()).thenReturn(valueOps);
 
-        // Pay
+        // 执行支付操作
         Registration paidReg = registrationService.payRegistration(regId);
         // Expect status 1 (paid but not checked in yet)
         assertEquals(1, paidReg.getStatus());

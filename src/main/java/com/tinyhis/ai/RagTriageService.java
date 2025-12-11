@@ -290,7 +290,7 @@ public class RagTriageService {
 
                     String content = delta.path("content").asText("");
                     if (!content.isEmpty()) {
-                        if ("\n".equals(content)) {
+                        if ("\n\n".equals(content) || "\n".equals(content)) {
                             if (pendingNewLine != null) {
                                 // Previous was \n, current is \n. Concatenate and send.
                                 String text = pendingNewLine + content;
@@ -621,7 +621,7 @@ public class RagTriageService {
         StringBuilder sb = new StringBuilder();
         sb.append(String.format("姓名：%s，性别：%s，年龄：%d岁\n",
                 patient.getName(),
-                patient.getGender() == 1 ? "男" : "女",
+                patient.getGender() == null ? "未知" : (patient.getGender() == 1 ? "男" : "女"),
                 patient.getAge()));
 
         // Current consultation (status=3) - show separately, not mixed into
@@ -825,15 +825,13 @@ public class RagTriageService {
     }
 
     /**
-     * Search knowledge base and return structured results for global text search.
-     * This method is intended for on-demand searches from the UI (e.g., text
-     * selection search)
-     * rather than RAG context retrieval. It uses the default hybrid search with
-     * keyword and vector matching.
+     * 搜索知识库并返回结构化结果，用于全局文本搜索。
+     * 此方法适用于从UI进行的按需搜索（例如，文本选择搜索），
+     * 而不是RAG上下文检索。它使用默认的混合搜索，包含关键词和向量匹配。
      * 
-     * @param query Search query text
-     * @param limit Maximum number of results to return
-     * @return List of matching documents with content
+     * @param query 搜索查询文本
+     * @param limit 返回结果的最大数量
+     * @return 包含内容的匹配文档列表
      */
     public List<MedicalDocument> searchKnowledge(String query, int limit) {
         if (limit <= 0)

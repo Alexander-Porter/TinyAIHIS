@@ -5,7 +5,7 @@
         <div class="logo-icon">
           <MedicineBoxOutlined style="font-size: 1em;"/>
         </div>
-        <h1>TinyHIS</h1>
+        <h1>TinyAIHIS</h1>
         <p>智慧医疗  极简体验</p>
       </div>
       

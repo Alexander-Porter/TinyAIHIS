@@ -14,8 +14,8 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import java.util.List;
 
 /**
- * AI Triage Service Implementation
- * Uses RAG (Retrieval Augmented Generation) with direct HTTP client to SiliconFlow/DeepSeek
+ * AI 分诊服务实现
+ * 使用基于 RAG（检索增强生成）技术，通过 HTTP 客户端直接连接 SiliconFlow/DeepSeek 服务
  */
 @Slf4j
 @Service

@@ -32,7 +32,7 @@ public class ScheduleTemplateServiceImpl extends ServiceImpl<ScheduleTemplateMap
     @Override
     @Transactional
     public void saveScheduleTemplate(ScheduleTemplate template) {
-        // Validate Room
+        // 验证诊室
         if (template.getRoomId() != null) {
             com.tinyhis.entity.ConsultingRoom room = consultingRoomMapper.selectById(template.getRoomId());
             if (room == null) {
@@ -46,7 +46,7 @@ public class ScheduleTemplateServiceImpl extends ServiceImpl<ScheduleTemplateMap
                         throw new IllegalArgumentException("该诊室不属于当前科室，无法分配");
                     }
                 } catch (Exception e) {
-                    log.warn("Failed to parse room deptIds: {}", room.getDeptIds());
+                    log.warn("解析诊室科室ID失败: {}", room.getDeptIds());
                 }
             }
         }
@@ -60,7 +60,7 @@ public class ScheduleTemplateServiceImpl extends ServiceImpl<ScheduleTemplateMap
             templateMapper.updateById(template);
         }
 
-        // Generate schedule for next 14 days
+        // 为未来14天生成排班
         LocalDate today = LocalDate.now();
         LocalDate endDate = today.plusDays(14);
         generateScheduleForTemplateInternal(template, today, endDate);
@@ -69,19 +69,19 @@ public class ScheduleTemplateServiceImpl extends ServiceImpl<ScheduleTemplateMap
     private void generateScheduleForTemplateInternal(ScheduleTemplate template, LocalDate startDate, LocalDate endDate) {
         LocalDate current = startDate;
         while (!current.isAfter(endDate)) {
-            // dayOfWeek: 0=Monday, 1=Tuesday, ..., 6=Sunday
+            // 星期几：0=周一，1=周二，...，6=周日
             int dayIndex = current.getDayOfWeek().getValue() - 1;
             
             if (template.getDayOfWeek() == dayIndex) {
                 final LocalDate scheduleDate = current;
-                // Check if schedule already exists
+                // 检查排班是否已存在
                 LambdaQueryWrapper<Schedule> existsWrapper = new LambdaQueryWrapper<>();
                 existsWrapper.eq(Schedule::getDoctorId, template.getDoctorId())
                             .eq(Schedule::getScheduleDate, scheduleDate)
                             .eq(Schedule::getShiftType, template.getShiftType());
                 
                 if (scheduleMapper.selectCount(existsWrapper) == 0) {
-                    // Create new schedule
+                    // 创建新排班
                     Schedule schedule = new Schedule();
                     schedule.setDeptId(template.getDeptId());
                     schedule.setDoctorId(template.getDoctorId());
@@ -91,7 +91,7 @@ public class ScheduleTemplateServiceImpl extends ServiceImpl<ScheduleTemplateMap
                     schedule.setCurrentCount(0);
                     schedule.setStatus(1);
                     schedule.setVersion(0);
-                    schedule.setRoomId(template.getRoomId()); // Set room from template
+                    schedule.setRoomId(template.getRoomId()); // 从模板设置诊室
                     schedule.setCreateTime(LocalDateTime.now());
                     schedule.setUpdateTime(LocalDateTime.now());
                     
@@ -115,7 +115,7 @@ public class ScheduleTemplateServiceImpl extends ServiceImpl<ScheduleTemplateMap
     @Override
     @Transactional
     public int generateSchedulesFromTemplates(LocalDate startDate, LocalDate endDate) {
-        // Get all active templates
+        // 获取所有有效模板
         LambdaQueryWrapper<ScheduleTemplate> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(ScheduleTemplate::getStatus, 1);
         List<ScheduleTemplate> templates = templateMapper.selectList(wrapper);
@@ -124,20 +124,20 @@ public class ScheduleTemplateServiceImpl extends ServiceImpl<ScheduleTemplateMap
         LocalDate current = startDate;
         
         while (!current.isAfter(endDate)) {
-            // dayOfWeek: 0=Monday, 1=Tuesday, ..., 6=Sunday
-            int dayIndex = current.getDayOfWeek().getValue() - 1; // Convert Monday=1 to 0
+            // 星期几：0=周一，1=周二，...，6=周日
+            int dayIndex = current.getDayOfWeek().getValue() - 1; // 将星期几转换为0-6（周一=0）
             
             final LocalDate scheduleDate = current;
             for (ScheduleTemplate template : templates) {
                 if (template.getDayOfWeek() == dayIndex) {
-                    // Check if schedule already exists
+                    // 检查排班是否已存在
                     LambdaQueryWrapper<Schedule> existsWrapper = new LambdaQueryWrapper<>();
                     existsWrapper.eq(Schedule::getDoctorId, template.getDoctorId())
                                 .eq(Schedule::getScheduleDate, scheduleDate)
                                 .eq(Schedule::getShiftType, template.getShiftType());
                     
                     if (scheduleMapper.selectCount(existsWrapper) == 0) {
-                        // Create new schedule
+                        // 创建新排班
                         Schedule schedule = new Schedule();
                         schedule.setDeptId(template.getDeptId());
                         schedule.setDoctorId(template.getDoctorId());
@@ -152,7 +152,7 @@ public class ScheduleTemplateServiceImpl extends ServiceImpl<ScheduleTemplateMap
                         
                         scheduleMapper.insert(schedule);
                         count++;
-                        log.debug("Generated schedule for doctor {} on {} {}", 
+                        log.debug("为医生 {} 在 {} {} 生成排班", 
                                 template.getDoctorId(), scheduleDate, template.getShiftType());
                     }
                 }
@@ -160,7 +160,7 @@ public class ScheduleTemplateServiceImpl extends ServiceImpl<ScheduleTemplateMap
             current = current.plusDays(1);
         }
         
-        log.info("Generated {} schedules from templates for {} to {}", count, startDate, endDate);
+        log.info("根据模板为 {} 至 {} 生成了 {} 条排班记录", startDate, endDate, count);
         return count;
     }
 
@@ -168,9 +168,9 @@ public class ScheduleTemplateServiceImpl extends ServiceImpl<ScheduleTemplateMap
     @Transactional
     public int generateNextWeekSchedules() {
         LocalDate today = LocalDate.now();
-        // Get next Monday
+        // 获取下周一
         LocalDate nextMonday = today.with(TemporalAdjusters.next(DayOfWeek.MONDAY));
-        // Get next Sunday
+        // 获取下周日
         LocalDate nextSunday = nextMonday.plusDays(6);
         
         return generateSchedulesFromTemplates(nextMonday, nextSunday);

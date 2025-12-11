@@ -22,7 +22,7 @@ class MedicalKnowledgeBaseTest {
     void setUp() throws IOException {
         knowledgeBase = new MedicalKnowledgeBase();
 
-        // Inject temp paths for testing
+        // 注入测试用的临时路径
         Path kbPath = tempDir.resolve("knowledge");
         Path vectorPath = tempDir.resolve("vector");
         kbPath.toFile().mkdirs();
@@ -31,10 +31,10 @@ class MedicalKnowledgeBaseTest {
         ReflectionTestUtils.setField(knowledgeBase, "knowledgePath", kbPath.toUri().toString());
         ReflectionTestUtils.setField(knowledgeBase, "vectorIndexPath", vectorPath.toUri().toString());
         ReflectionTestUtils.setField(knowledgeBase, "embeddingModel", "BAAI/bge-m3");
-        ReflectionTestUtils.setField(knowledgeBase, "defaultKeywordWeight", 0.7f); // Favor keywords for test without
-                                                                                   // API key
+        ReflectionTestUtils.setField(knowledgeBase, "defaultKeywordWeight", 0.7f); // 测试时优先使用关键词
+                                                                                   // 在没有API密钥时优先使用关键词搜索
 
-        // Initialize (mocking embedding API or relying on keyword search mostly)
+        // 初始化（模拟嵌入API或主要依赖关键词搜索）
         knowledgeBase.init();
     }
 
@@ -48,29 +48,26 @@ class MedicalKnowledgeBaseTest {
 
         knowledgeBase.addDocument(doc);
 
-        // Force refresh
+        // 强制刷新
         try {
-            Thread.sleep(1000); // Wait for async indexing/commit if any, though the code seems sync/commit on
-                                // add
+            Thread.sleep(1000); // 等待异步索引/提交完成，尽管代码看起来是同步的
         } catch (InterruptedException e) {
             e.printStackTrace();
         }
 
-        // Search by keyword (symptoms)
-        List<MedicalDocument> results = knowledgeBase.hybridSearch("发热", 5, 1.0f); // 1.0 weight for keywords
+        // 通过关键词（症状）搜索
+        List<MedicalDocument> results = knowledgeBase.hybridSearch("发热", 5, 1.0f); // 关键词权重为1.0
 
-        assertTrue(results.isEmpty() || results.stream().anyMatch(d -> "流行性感冒".equals(d.getDiseaseName())), 
-                   "Search should return empty list or include the flu document");
-        // Note: Without API key, embedding search doesn't work, so results might be empty
+        assertFalse(results.isEmpty(), "应该能通过症状找到文档");
+        assertEquals("流行性感冒", results.get(0).getDiseaseName());
     }
 
     @Test
     void testDepartmentInference() {
-        // Use reflection to access private method if needed, or just test via add logic
-        // if exposed
-        // inferDepartment is private, but addDocument calls it if we didn't set it?
-        // Actually loadDocument sets it.
-        // Let's test the search filtering by department.
+        // 如果需要，使用反射访问私有方法，或者通过添加逻辑进行测试
+        // inferDepartment是私有的，但如果我们没有设置它，addDocument会调用它
+        // 实际上是loadDocument设置了它
+        // 让我们测试按科室筛选的搜索功能
 
         MedicalDocument doc1 = new MedicalDocument();
         doc1.setId("1");

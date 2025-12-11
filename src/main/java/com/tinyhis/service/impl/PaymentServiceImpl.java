@@ -68,7 +68,7 @@ public class PaymentServiceImpl implements PaymentService {
         }
 
         // 模拟缴费成功
-        registration.setStatus(1); // Paid, waiting for check-in
+        registration.setStatus(1); // 已支付，等待就诊
         registrationMapper.updateById(registration);
 
         BigDecimal amount = registration.getFee() != null ? registration.getFee() : registrationFee;
@@ -80,7 +80,7 @@ public class PaymentServiceImpl implements PaymentService {
     public PaymentResponse payPrescriptions(Long recordId) {
         LambdaQueryWrapper<Prescription> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(Prescription::getRecordId, recordId)
-               .eq(Prescription::getStatus, 0); // Pending payment
+               .eq(Prescription::getStatus, 0); // 待支付
         List<Prescription> prescriptions = prescriptionMapper.selectList(wrapper);
 
         if (prescriptions.isEmpty()) {
@@ -89,14 +89,14 @@ public class PaymentServiceImpl implements PaymentService {
 
         BigDecimal totalAmount = BigDecimal.ZERO;
         for (Prescription p : prescriptions) {
-            // Calculate prescription price
+            // 计算处方价格
             DrugDict drug = drugDictMapper.selectById(p.getDrugId());
             if (drug != null) {
                 BigDecimal itemPrice = drug.getPrice().multiply(new BigDecimal(p.getQuantity()));
                 totalAmount = totalAmount.add(itemPrice);
             }
             
-            // Update status to paid
+            // 更新状态为已支付
             p.setStatus(1);
             prescriptionMapper.updateById(p);
         }
@@ -117,7 +117,7 @@ public class PaymentServiceImpl implements PaymentService {
         }
 
         // 模拟缴费成功
-        order.setStatus(1); // Paid, pending examination
+        order.setStatus(1); // 已支付，待检查
         labOrderMapper.updateById(order);
 
         BigDecimal amount = order.getPrice() != null ? order.getPrice() : defaultLabFee;

@@ -64,7 +64,7 @@ public class DoctorWorkstationServiceImpl implements DoctorWorkstationService {
 
         List<Registration> registrations = registrationMapper.selectList(wrapper);
 
-        // Convert to detailed DTOs
+        // 转换为详细的DTO对象
         return registrations.stream()
                 .map(reg -> buildVisitDetailDTO(reg, true))
                 .toList();
@@ -81,14 +81,15 @@ public class DoctorWorkstationServiceImpl implements DoctorWorkstationService {
 
     @Override
     public List<VisitDetailDTO> getPatientHistory(Long patientId, Long doctorId) {
-        // Get completed registrations for this patient
+        // 获取该患者已完成的挂号记录
         LambdaQueryWrapper<Registration> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(Registration::getPatientId, patientId)
-                .eq(Registration::getStatus, 4); // Completed
+                .eq(Registration::getStatus, 4); // 已完成
 
-        if (doctorId != null) {
-            wrapper.eq(Registration::getDoctorId, doctorId);
-        }
+        // 允许查看所有医生/科室的历史记录
+        // if (doctorId != null) {
+        //     wrapper.eq(Registration::getDoctorId, doctorId);
+        // }
 
         wrapper.orderByDesc(Registration::getCreateTime);
 
@@ -111,7 +112,7 @@ public class DoctorWorkstationServiceImpl implements DoctorWorkstationService {
             throw new BusinessException("只有就诊中的患者可以暂停");
         }
 
-        registration.setStatus(6); // Set to Paused
+        registration.setStatus(6); // 设置为已暂停
         registrationMapper.updateById(registration);
 
         log.info("Paused consultation for registration {}", regId);
@@ -130,7 +131,7 @@ public class DoctorWorkstationServiceImpl implements DoctorWorkstationService {
             throw new BusinessException("只有候诊中或暂停的患者可以恢复就诊");
         }
 
-        registration.setStatus(3); // In consultation
+        registration.setStatus(3); // 就诊中
         registrationMapper.updateById(registration);
 
         log.info("Resumed consultation for registration {}", regId);
@@ -140,7 +141,7 @@ public class DoctorWorkstationServiceImpl implements DoctorWorkstationService {
     private VisitDetailDTO buildVisitDetailDTO(Registration reg, boolean isToday) {
         VisitDetailDTO dto = new VisitDetailDTO();
 
-        // Copy registration info
+        // 复制挂号信息
         dto.setRegId(reg.getRegId());
         dto.setPatientId(reg.getPatientId());
         dto.setDoctorId(reg.getDoctorId());
@@ -151,7 +152,7 @@ public class DoctorWorkstationServiceImpl implements DoctorWorkstationService {
         dto.setCreateTime(reg.getCreateTime());
         dto.setIsToday(isToday);
 
-        // Get patient info
+        // 获取患者信息
         PatientInfo patient = patientInfoMapper.selectById(reg.getPatientId());
         if (patient != null) {
             dto.setPatientName(patient.getName());
@@ -161,13 +162,13 @@ public class DoctorWorkstationServiceImpl implements DoctorWorkstationService {
             dto.setAge(patient.getAge());
         }
 
-        // Get schedule info
+        // 获取排班信息
         Schedule schedule = scheduleMapper.selectById(reg.getScheduleId());
         if (schedule != null) {
             dto.setScheduleDate(schedule.getScheduleDate().toString());
             dto.setShiftType(schedule.getShiftType());
 
-            // Get consulting room info
+            // 获取诊室信息
             if (schedule.getRoomId() != null) {
                 ConsultingRoom room = consultingRoomMapper.selectById(schedule.getRoomId());
                 if (room != null) {
@@ -177,12 +178,12 @@ public class DoctorWorkstationServiceImpl implements DoctorWorkstationService {
                 }
             }
 
-            // Get doctor info
+            // 获取医生信息
             SysUser doctor = sysUserMapper.selectById(schedule.getDoctorId());
             if (doctor != null) {
                 dto.setDoctorName(doctor.getRealName());
 
-                // Get department info
+                // 获取科室信息
                 if (doctor.getDeptId() != null) {
                     Department dept = departmentMapper.selectById(doctor.getDeptId());
                     if (dept != null) {
@@ -192,13 +193,13 @@ public class DoctorWorkstationServiceImpl implements DoctorWorkstationService {
             }
         }
 
-        // Get medical record for this visit
+        // 获取本次就诊的病历
         LambdaQueryWrapper<MedicalRecord> recordWrapper = new LambdaQueryWrapper<>();
         recordWrapper.eq(MedicalRecord::getRegId, reg.getRegId());
         MedicalRecord record = medicalRecordMapper.selectOne(recordWrapper);
         dto.setMedicalRecord(record);
 
-        // Get prescriptions and lab orders if medical record exists
+        // 如果存在病历，获取处方和检查单
         if (record != null) {
             dto.setPrescriptions(emrService.getPrescriptionDetails(record.getRecordId()));
             dto.setLabOrders(emrService.getLabOrdersByRecord(record.getRecordId()));

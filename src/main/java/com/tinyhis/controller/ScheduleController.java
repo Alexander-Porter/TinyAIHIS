@@ -14,7 +14,7 @@ import java.time.LocalDate;
 import java.util.List;
 
 /**
- * Schedule Controller
+ * 排班控制器
  */
 @RestController
 @RequestMapping("/api/schedule")
@@ -24,7 +24,7 @@ public class ScheduleController {
     private final ScheduleService scheduleService;
 
     /**
-     * Get all departments
+     * 获取所有科室列表
      */
     @GetMapping("/departments")
     public Result<List<Department>> getDepartments() {
@@ -33,7 +33,7 @@ public class ScheduleController {
     }
 
     /**
-     * Get department by ID
+     * 根据ID获取科室信息
      */
     @GetMapping("/department/{deptId}")
     public Result<Department> getDepartment(@PathVariable Long deptId) {
@@ -42,7 +42,7 @@ public class ScheduleController {
     }
 
     /**
-     * Get doctors by department
+     * 获取科室下的医生列表
      */
     @GetMapping("/doctors")
     public Result<List<SysUser>> getDoctors(@RequestParam Long deptId) {
@@ -51,7 +51,7 @@ public class ScheduleController {
     }
 
     /**
-     * Get schedule list
+     * 获取排班列表
      */
     @GetMapping("/list")
     public Result<List<ScheduleDTO>> getScheduleList(
@@ -63,7 +63,7 @@ public class ScheduleController {
     }
 
     /**
-     * Get schedule by ID
+     * 根据ID获取排班详情
      */
     @GetMapping("/{scheduleId}")
     public Result<Schedule> getSchedule(@PathVariable Long scheduleId) {
@@ -72,7 +72,7 @@ public class ScheduleController {
     }
 
     /**
-     * Create or update schedule (Admin only)
+     * 创建或更新排班（仅管理员）
      */
     @PostMapping("/save")
     public Result<Schedule> saveSchedule(@RequestBody Schedule schedule) {

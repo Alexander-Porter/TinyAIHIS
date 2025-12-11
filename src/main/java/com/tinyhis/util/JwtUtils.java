@@ -13,7 +13,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * JWT Token Utility
+ * JWT令牌工具类
  */
 @Component
 public class JwtUtils {
@@ -29,7 +29,7 @@ public class JwtUtils {
     }
 
     /**
-     * Generate JWT token
+     * 生成JWT令牌
      */
     public String generateToken(Long userId, String username, String role, String userType) {
         Map<String, Object> claims = new HashMap<>();
@@ -48,7 +48,7 @@ public class JwtUtils {
     }
 
     /**
-     * Parse and validate JWT token
+     * 解析并验证JWT令牌
      */
     public Claims parseToken(String token) {
         return Jwts.parser()
@@ -59,7 +59,7 @@ public class JwtUtils {
     }
 
     /**
-     * Check if token is expired
+     * 检查令牌是否过期
      */
     public boolean isTokenExpired(String token) {
         try {
@@ -71,7 +71,7 @@ public class JwtUtils {
     }
 
     /**
-     * Get user ID from token
+     * 从令牌中获取用户ID
      */
     public Long getUserId(String token) {
         Claims claims = parseToken(token);
@@ -79,7 +79,7 @@ public class JwtUtils {
     }
 
     /**
-     * Get role from token
+     * 从令牌中获取角色
      */
     public String getRole(String token) {
         Claims claims = parseToken(token);
@@ -87,7 +87,7 @@ public class JwtUtils {
     }
 
     /**
-     * Get user type from token (patient or staff)
+     * 从令牌中获取用户类型（患者或员工）
      */
     public String getUserType(String token) {
         Claims claims = parseToken(token);

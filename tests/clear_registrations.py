@@ -32,6 +32,7 @@ def parse_args():
     parser.add_argument('--admin-pass', default='admin123')
     parser.add_argument('--base-url', default='http://localhost/api')
     parser.add_argument('--dry-run', action='store_true')
+    parser.add_argument('--delete', action='store_true', help='Hard delete all registration and related data from DB')
     return parser.parse_args()
 
 
@@ -39,6 +40,36 @@ def get_all_registration_ids(conn):
     with conn.cursor() as cur:
         cur.execute("SELECT reg_id, status FROM registration;")
         return cur.fetchall()  # list of tuples (reg_id, status)
+
+
+def hard_delete_all(conn):
+    """
+    Hard delete all data related to registrations to reset the system state.
+    """
+    print("WARNING: Performing hard delete of all registration data...")
+    with conn.cursor() as cur:
+        # 1. Delete prescriptions
+        print("Deleting prescriptions...")
+        cur.execute("DELETE FROM prescription")
+        
+        # 2. Delete lab orders
+        print("Deleting lab orders...")
+        cur.execute("DELETE FROM lab_order")
+        
+        # 3. Delete medical records
+        print("Deleting medical records...")
+        cur.execute("DELETE FROM medical_record")
+        
+        # 4. Delete registrations
+        print("Deleting registrations...")
+        cur.execute("DELETE FROM registration")
+        
+        # 5. Reset schedule counts
+        print("Resetting schedule counts...")
+        cur.execute("UPDATE schedule SET current_count = 0")
+        
+        conn.commit()
+    print("Hard delete completed successfully.")
 
 
 def admin_login(base_url, username, password):
@@ -71,6 +102,13 @@ if __name__ == '__main__':
     print(f"Connecting to DB {args.db_host}:{args.db_port} (DB: {args.db_name}) as {args.db_user}")
     conn = pymysql.connect(host=args.db_host, port=args.db_port, user=args.db_user, passwd=args.db_pass, db=args.db_name, cursorclass=pymysql.cursors.DictCursor)
     try:
+        if args.delete:
+            if args.dry_run:
+                print("Dry run enabled. Skipping actual deletion.")
+            else:
+                hard_delete_all(conn)
+            sys.exit(0)
+
         regs = get_all_registration_ids(conn)
         print(f"Found {len(regs)} registration rows")
         if not regs:

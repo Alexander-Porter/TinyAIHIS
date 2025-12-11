@@ -52,7 +52,7 @@ public class ExcelServiceImpl implements ExcelService {
             EasyExcel.read(file.getInputStream(), DrugExcelDTO.class, new ReadListener<DrugExcelDTO>() {
                 @Override
                 public void invoke(DrugExcelDTO data, AnalysisContext context) {
-                    // Convert DTO to entity and save
+                    // 将DTO转换为实体并保存
                     DrugDict drug = new DrugDict();
                     drug.setName(data.getName());
                     drug.setSpec(data.getSpec());
@@ -83,16 +83,16 @@ public class ExcelServiceImpl implements ExcelService {
     @Override
     public void exportDrugs(HttpServletResponse response) {
         try {
-            // Set response headers
+            // 设置响应头
             response.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
             response.setCharacterEncoding("utf-8");
             String fileName = URLEncoder.encode("药品列表", StandardCharsets.UTF_8).replaceAll("\\+", "%20");
             response.setHeader("Content-disposition", "attachment;filename*=utf-8''" + fileName + ".xlsx");
 
-            // Query all drugs
+            // 查询所有药品
             List<DrugDict> drugs = drugDictMapper.selectList(null);
             
-            // Convert to DTOs
+            // 转换为DTO
             List<DrugExcelDTO> dtos = drugs.stream().map(drug -> {
                 DrugExcelDTO dto = new DrugExcelDTO();
                 dto.setName(drug.getName());
@@ -104,7 +104,7 @@ public class ExcelServiceImpl implements ExcelService {
                 return dto;
             }).toList();
 
-            // Write to Excel
+            // 写入Excel
             EasyExcel.write(response.getOutputStream(), DrugExcelDTO.class)
                     .sheet("药品列表")
                     .doWrite(dtos);

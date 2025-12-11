@@ -9,48 +9,48 @@ import java.time.LocalDate;
 import java.util.List;
 
 /**
- * Schedule Service Interface
+ * 排班服务接口
  */
 public interface ScheduleService {
 
     /**
-     * Get all departments
+     * 获取所有科室
      */
     List<Department> getAllDepartments();
 
     /**
-     * Get department by ID
+     * 根据ID获取科室
      */
     Department getDepartmentById(Long deptId);
 
     /**
-     * Get doctors by department
+     * 获取科室下的医生列表
      */
     List<SysUser> getDoctorsByDept(Long deptId);
 
     /**
-     * Get schedules by department and date range
+     * 获取科室在指定日期范围内的排班
      */
     List<ScheduleDTO> getScheduleList(Long deptId, LocalDate startDate, LocalDate endDate);
 
     /**
-     * Get schedule by ID
+     * 根据ID获取排班信息
      */
     Schedule getScheduleById(Long scheduleId);
 
     /**
-     * Create or update schedule
+     * 创建或更新排班
      */
     Schedule saveSchedule(Schedule schedule);
 
     /**
-     * Increment current count for schedule (with flash sale protection)
-     * Uses optimistic locking to prevent overselling
+     * 增加排班的当前挂号数（带秒杀保护）
+     * 使用乐观锁防止超卖
      */
     boolean incrementCount(Long scheduleId);
     
     /**
-     * Decrement current count for schedule (for cancellation)
+     * 减少排班的当前挂号数（用于取消预约）
      */
     boolean decrementCount(Long scheduleId);
 }

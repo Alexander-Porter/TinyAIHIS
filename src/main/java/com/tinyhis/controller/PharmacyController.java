@@ -1,5 +1,6 @@
 package com.tinyhis.controller;
 
+import com.tinyhis.dto.PrescriptionDetailDTO;
 import com.tinyhis.dto.Result;
 import com.tinyhis.entity.DrugDict;
 import com.tinyhis.entity.Prescription;
@@ -50,8 +51,8 @@ public class PharmacyController {
      * Get paid prescriptions waiting for dispensing
      */
     @GetMapping("/prescriptions/paid")
-    public Result<List<Prescription>> getPaidPrescriptions() {
-        List<Prescription> prescriptions = pharmacyService.getPaidPrescriptions();
+    public Result<List<PrescriptionDetailDTO>> getPaidPrescriptions() {
+        List<PrescriptionDetailDTO> prescriptions = pharmacyService.getPaidPrescriptions();
         return Result.success(prescriptions);
     }
 

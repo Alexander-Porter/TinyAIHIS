@@ -24,8 +24,9 @@ const dispensing = ref(null)
 
 const columns = [
   { title: '处方号', dataIndex: 'presId', key: 'presId', width: 80 },
-  { title: '病历号', dataIndex: 'recordId', key: 'recordId', width: 80 },
-  { title: '药品ID', dataIndex: 'drugId', key: 'drugId', width: 80 },
+  { title: '患者姓名', dataIndex: 'patientName', key: 'patientName', width: 100 },
+  { title: '药品名称', dataIndex: 'drugName', key: 'drugName', width: 150 },
+  { title: '规格', dataIndex: 'drugSpec', key: 'drugSpec', width: 100 },
   { title: '数量', dataIndex: 'quantity', key: 'quantity', width: 80 },
   { title: '用法用量', dataIndex: 'usageInstruction', key: 'usageInstruction' },
   { title: '操作', key: 'action', width: 100 }

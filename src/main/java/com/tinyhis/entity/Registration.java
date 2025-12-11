@@ -8,7 +8,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 /**
- * Registration Entity
+ * 挂号实体类
  */
 @Data
 @TableName("registration")
@@ -21,14 +21,14 @@ public class Registration {
     private Long doctorId;
     private Long scheduleId;
     /**
-     * Status codes:
-     * 0 - pending payment
-     * 1 - paid/waiting check-in
-     * 2 - checked in/waiting
-     * 3 - in consultation
-     * 4 - completed
-     * 5 - cancelled
-     * 6 - paused/pending return
+     * 状态码：
+     * 0 - 待支付
+     * 1 - 已支付/待签到
+     * 2 - 已签到/候诊中
+     * 3 - 就诊中
+     * 4 - 已完成
+     * 5 - 已取消
+     * 6 - 已暂停/待回诊
      */
     private Integer status;
     private Integer queueNumber;

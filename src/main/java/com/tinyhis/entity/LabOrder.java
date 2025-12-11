@@ -8,7 +8,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 /**
- * Lab Order Entity
+ * 检验单实体类
  */
 @Data
 @TableName("lab_order")
@@ -21,14 +21,14 @@ public class LabOrder {
     private String itemName;
     private BigDecimal price;
     /**
-     * Status codes:
-     * 0 - pending payment
-     * 1 - paid/pending examination
-     * 2 - completed
+     * 状态码：
+     * 0 - 待支付
+     * 1 - 已支付/待检查
+     * 2 - 已完成
      */
     private Integer status;
     private String resultText;
-    private String resultImages; // JSON array of image URLs
+    private String resultImages; // 图片URL的JSON数组
     private LocalDateTime createTime;
     private LocalDateTime updateTime;
 }

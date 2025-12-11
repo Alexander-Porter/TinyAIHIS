@@ -8,25 +8,25 @@ import java.util.List;
 public interface ScheduleTemplateService extends IService<ScheduleTemplate> {
     
     /**
-     * Get all templates for a department
+     * 获取科室的所有排班模板
      */
     List<ScheduleTemplate> getTemplatesByDept(Long deptId);
     
     /**
-     * Generate schedules for a specific date range based on templates
-     * @param startDate Start date (inclusive)
-     * @param endDate End date (inclusive)
-     * @return Number of schedules generated
+     * 根据模板生成指定日期范围的排班
+     * @param startDate 开始日期（包含）
+     * @param endDate 结束日期（包含）
+     * @return 生成的排班数量
      */
     int generateSchedulesFromTemplates(LocalDate startDate, LocalDate endDate);
     
     /**
-     * Save schedule template with validation
+     * 保存排班模板（带验证）
      */
     void saveScheduleTemplate(ScheduleTemplate template);
 
     /**
-     * Generate schedules for next week based on templates
+     * 根据模板生成下周的排班
      */
     int generateNextWeekSchedules();
 }

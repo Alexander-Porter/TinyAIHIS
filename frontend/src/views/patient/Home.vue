@@ -22,7 +22,7 @@
           <van-icon name="user-o" size="40" />
         </div>
         <div class="info">
-          <div class="name">欢迎使用 TinyHIS</div>
+          <div class="name">欢迎使用 TinyAIHIS</div>
           <div class="card-no">请登录后使用完整功能</div>
         </div>
       </div>
