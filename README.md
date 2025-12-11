@@ -1,6 +1,7 @@
-# TinyHIS - 基于AI的智能医院信息系统
+# TinyAIHIS - 基于AI的智能医院信息系统
 
-TinyHIS 是一个现代化的医院信息系统（HIS），集成了人工智能辅助诊断、智能分诊、电子病历管理等功能，旨在提高医疗服务效率和质量。
+TinyAIHIS 是一个现代化的医院信息系统（HIS），集成了人工智能辅助诊断、智能分诊、电子病历管理等功能，旨在提高医疗服务效率和质量。
+![alt text](logos/logo_with_slogan.png.png)
 
 ## 核心功能
 
@@ -87,8 +88,8 @@ TinyHIS 是一个现代化的医院信息系统（HIS），集成了人工智能
 
 #### 1. 克隆项目
 ```bash
-git clone https://github.com/Alexander-Porter/TinyHIS.git
-cd TinyHIS
+git clone https://github.com/Alexander-Porter/TinyAIHIS.git
+cd TinyAIHIS
 ```
 
 #### 2. 配置环境变量
@@ -177,15 +178,12 @@ docker-compose logs -f
 docker-compose -f docker-compose.test.yml up --abort-on-container-exit
 ```
 
-#### 本地运行测试
-```bash
-mvn test -Dspring.profiles.active=test
-```
+
 
 ## 项目结构
 
 ```
-TinyHIS/
+TinyAIHIS/
 ├── docker/                      # Docker配置文件
 │   ├── init.sql                # 数据库初始化脚本
 │   ├── nginx.conf              # Nginx配置
@@ -201,7 +199,7 @@ TinyHIS/
 │   └── package.json
 ├── src/
 │   ├── main/
-│   │   ├── java/com/tinyhis/
+│   │   ├── java/com/TinyAIHIS/
 │   │   │   ├── ai/             # AI相关功能
 │   │   │   ├── config/         # Spring配置类
 │   │   │   ├── controller/     # REST API控制器
@@ -355,15 +353,6 @@ SERVER_PORT=8081  # 修改后端端口
 VITE_APP_URL=http://localhost:5174  # 修改前端端口
 ```
 
-## 许可证
-
-本项目仅供学习和研究使用。
-
-## 联系方式
-
-- **项目维护者**: Alexander Porter
-- **GitHub**: https://github.com/Alexander-Porter/TinyHIS
-- **Email**: your.email@example.com
 
 ## 致谢
 

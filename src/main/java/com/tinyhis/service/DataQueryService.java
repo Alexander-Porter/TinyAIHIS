@@ -1,6 +1,5 @@
 package com.tinyhis.service;
 
-import com.tinyhis.dto.Result;
 import jakarta.servlet.http.HttpServletResponse;
 import java.time.LocalDate;
 import java.util.Map;

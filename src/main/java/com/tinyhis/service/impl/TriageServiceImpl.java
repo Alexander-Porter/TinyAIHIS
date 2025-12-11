@@ -2,7 +2,6 @@ package com.tinyhis.service.impl;
 
 import com.tinyhis.ai.MedicalDocument;
 import com.tinyhis.ai.RagTriageService;
-import com.tinyhis.ai.TriageRecommendation;
 import com.tinyhis.dto.TriageRequest;
 import com.tinyhis.dto.TriageResult;
 import com.tinyhis.service.TriageService;

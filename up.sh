@@ -1,1 +1,0 @@
-docker-compose down; docker volume rm tinyhis_mysql_data; docker-compose up -d

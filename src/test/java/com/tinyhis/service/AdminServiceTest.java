@@ -49,8 +49,6 @@ class AdminServiceTest {
     @Autowired
     private SysUserMapper sysUserMapper;
 
-    @Autowired
-    private ScheduleMapper scheduleMapper;
 
     @MockBean
     private StringRedisTemplate redisTemplate;

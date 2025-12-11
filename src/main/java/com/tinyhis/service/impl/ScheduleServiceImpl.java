@@ -176,7 +176,6 @@ public class ScheduleServiceImpl implements ScheduleService {
         // 同步更新 Redis 号源缓存：管理员调整 maxQuota 后，刷新剩余可挂号量
         if (schedule.getScheduleId() != null) {
             String quotaKey = quotaPrefix + schedule.getScheduleId();
-            String userKey = userPrefix + schedule.getScheduleId();
             int available = Math.max(0, (schedule.getMaxQuota() == null ? 0 : schedule.getMaxQuota())
                     - (schedule.getCurrentCount() == null ? 0 : schedule.getCurrentCount()));
             redisTemplate.opsForValue().set(quotaKey, String.valueOf(available));

@@ -1,7 +1,6 @@
 package com.tinyhis.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.tinyhis.dto.PrescriptionDetailDTO;
 import com.tinyhis.dto.VisitDetailDTO;
 import com.tinyhis.entity.*;
 import com.tinyhis.exception.BusinessException;

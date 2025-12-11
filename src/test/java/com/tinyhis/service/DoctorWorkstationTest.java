@@ -34,8 +34,6 @@ class DoctorWorkstationTest {
     @Autowired
     private EmrService emrService;
 
-    @Autowired
-    private DoctorWorkstationService doctorWorkstationService;
 
     @Autowired
     private RegistrationMapper registrationMapper;

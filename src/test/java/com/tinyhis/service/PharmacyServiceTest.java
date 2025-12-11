@@ -1,8 +1,8 @@
 package com.tinyhis.service;
 
+import com.tinyhis.dto.PrescriptionDetailDTO;
 import com.tinyhis.entity.DrugDict;
 import com.tinyhis.entity.Prescription;
-import com.tinyhis.mapper.DrugDictMapper;
 import com.tinyhis.mapper.PrescriptionMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -29,9 +29,6 @@ class PharmacyServiceTest {
 
     @Autowired
     private PharmacyService pharmacyService;
-
-    @Autowired
-    private DrugDictMapper drugDictMapper;
 
     @Autowired
     private PrescriptionMapper prescriptionMapper;
@@ -89,7 +86,7 @@ class PharmacyServiceTest {
         assertNotNull(presId);
         
         // 3. 查询待发药处方
-        List<Prescription> paidPrescriptions = pharmacyService.getPaidPrescriptions();
+        List<PrescriptionDetailDTO> paidPrescriptions = pharmacyService.getPaidPrescriptions();
         assertTrue(paidPrescriptions.stream().anyMatch(p -> p.getPresId().equals(presId)));
         
         // 4. 发药

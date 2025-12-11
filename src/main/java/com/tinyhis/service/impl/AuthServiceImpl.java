@@ -72,8 +72,8 @@ public class AuthServiceImpl implements AuthService {
 
         String token = jwtUtils.generateToken(patient.getPatientId(), patient.getPhone(), "PATIENT", "patient");
 
-        return new LoginResponse(token, patient.getPatientId(), patient.getPhone(), 
-                                 patient.getName(), "PATIENT", null);
+        return new LoginResponse(token, patient.getPatientId(), patient.getPhone(),
+                patient.getName(), "PATIENT", null);
     }
 
     @Override
@@ -83,24 +83,26 @@ public class AuthServiceImpl implements AuthService {
         SysUser user = sysUserMapper.selectOne(wrapper);
 
         if (user == null) {
-        if (user.getStatus() != null && user.getStatus() == 0) {
-            throw new BusinessException("账号已被禁用");
-        }
-
-        // In demo mode, skip password check
-        if (!demoMode) {
-            if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
-                throw new BusinessException("密码错误");
+            throw new BusinessException("用户不存在");
+        } else {
+            if (user.getStatus() != null && user.getStatus() == 0) {
+                throw new BusinessException("账号已被禁用");
             }
+
+            // In demo mode, skip password check
+            if (!demoMode) {
+                if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
+                    throw new BusinessException("密码错误");
+                }
+            }
+
+          
         }
 
         String token = jwtUtils.generateToken(user.getUserId(), user.getUsername(), user.getRole(), "staff");
-        }
 
-        String token = jwtUtils.generateToken(user.getUserId(), user.getUsername(), user.getRole(), "staff");
-
-        return new LoginResponse(token, user.getUserId(), user.getUsername(), 
-                                 user.getRealName(), user.getRole(), user.getDeptId());
+        return new LoginResponse(token, user.getUserId(), user.getUsername(),
+                user.getRealName(), user.getRole(), user.getDeptId());
     }
 
     @Override
