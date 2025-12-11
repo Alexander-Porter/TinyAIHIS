@@ -1,20 +1,20 @@
 package com.tinyhis.util;
 
 /**
- * Geographic Utility for GPS-based check-in
- * Uses Haversine formula to calculate distance between two points
+ * 基于GPS签到的地理位置工具类
+ * 使用Haversine公式计算两点之间的距离
  */
 public class GeoUtils {
 
-    private static final double EARTH_RADIUS = 6371000; // meters
+    private static final double EARTH_RADIUS = 6371000; // 地球半径（米）
 
     /**
-     * Calculate distance between two GPS coordinates using Haversine formula
-     * @param lat1 Latitude of point 1
-     * @param lon1 Longitude of point 1
-     * @param lat2 Latitude of point 2
-     * @param lon2 Longitude of point 2
-     * @return Distance in meters
+     * 使用Haversine公式计算两个GPS坐标点之间的距离
+     * @param lat1 第一个点的纬度
+     * @param lon1 第一个点的经度
+     * @param lat2 第二个点的纬度
+     * @param lon2 第二个点的经度
+     * @return 两点之间的距离（米）
      */
     public static double calculateDistance(double lat1, double lon1, double lat2, double lon2) {
         double dLat = Math.toRadians(lat2 - lat1);
@@ -30,13 +30,13 @@ public class GeoUtils {
     }
 
     /**
-     * Check if a location is within the specified radius
-     * @param userLat User's latitude
-     * @param userLon User's longitude
-     * @param targetLat Target latitude (e.g., hospital)
-     * @param targetLon Target longitude
-     * @param radiusMeters Allowed radius in meters
-     * @return true if within radius
+     * 检查位置是否在指定半径范围内
+     * @param userLat 用户纬度
+     * @param userLon 用户经度
+     * @param targetLat 目标纬度（例如：医院）
+     * @param targetLon 目标经度
+     * @param radiusMeters 允许的半径（米）
+     * @return 如果在半径范围内返回true
      */
     public static boolean isWithinRadius(double userLat, double userLon, 
                                           double targetLat, double targetLon, 

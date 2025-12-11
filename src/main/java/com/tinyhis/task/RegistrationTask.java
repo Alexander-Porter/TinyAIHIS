@@ -31,7 +31,7 @@ public class RegistrationTask {
         LocalDateTime expireTime = LocalDateTime.now().minusMinutes(15);
         
         LambdaQueryWrapper<Registration> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(Registration::getStatus, 0) // Pending payment
+        wrapper.eq(Registration::getStatus, 0) // 待支付
                .lt(Registration::getCreateTime, expireTime);
                
         List<Registration> expiredList = registrationMapper.selectList(wrapper);

@@ -43,10 +43,10 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * Medical Knowledge Base for RAG
- * - Loads medical JSON files
- * - Embeds with SiliconFlow BAAI/bge-m3 (1024-d, ~8192 context)
- * - Persists vectors in a lightweight Lucene HNSW index on disk
+ * 医疗知识库（RAG实现）
+ * - 加载医疗JSON文件
+ * - 使用SiliconFlow BAAI/bge-m3模型进行向量化（1024维，约8192上下文）
+ * - 在磁盘上使用轻量级Lucene HNSW索引持久化向量
  */
 @Slf4j
 @Component
@@ -79,7 +79,7 @@ public class MedicalKnowledgeBase {
     private final HttpClient httpClient = HttpClient.newHttpClient();
     private ExecutorService embeddingExecutor;
     private final ScheduledExecutorService rateRefillScheduler = new ScheduledThreadPoolExecutor(1);
-    private final Semaphore rpmLimiter = new Semaphore(10); // conservative QPS << 2000 RPM
+    private final Semaphore rpmLimiter = new Semaphore(10); // 保守的QPS << 2000 RPM
     private final AtomicInteger tokensThisWindow = new AtomicInteger(0);
     private volatile long tokenWindowStartMs = System.currentTimeMillis();
 
@@ -196,7 +196,7 @@ public class MedicalKnowledgeBase {
             try {
                 Map<String, Float> docScores = new HashMap<>();
 
-                // 1. Keyword search
+                // 1. 关键词搜索
                 if (keywordWeight > 0) {
                     List<ScoredDoc> keywordResults = keywordSearch(searcher, query, topK * 2);
                     float maxKeywordScore = keywordResults.isEmpty() ? 1.0f : keywordResults.get(0).score;
@@ -207,7 +207,7 @@ public class MedicalKnowledgeBase {
                     }
                 }
 
-                // 2. Vector search
+                // 2. 向量搜索
                 float vectorWeight = 1.0f - keywordWeight;
                 if (vectorWeight > 0) {
                     float[] queryVector = embedText(query);
@@ -226,7 +226,7 @@ public class MedicalKnowledgeBase {
                     }
                 }
 
-                // 3. Sort by combined score and return topK
+                // 3. 按综合得分排序并返回topK结果
                 return docScores.entrySet().stream()
                         .sorted(Map.Entry.<String, Float>comparingByValue().reversed())
                         .limit(topK)
@@ -254,18 +254,18 @@ public class MedicalKnowledgeBase {
      * Keyword-only search using multi-field query
      */
     private List<ScoredDoc> keywordSearch(IndexSearcher searcher, String queryText, int topN) throws Exception {
-        // Use multi-field parser to search across multiple fields
+        // 使用多字段解析器在多个字段中搜索
         String[] fields = { "disease_text", "department_text", "symptoms", "causes", "diagnosis", "treatment",
                 "prevention", "content" };
         Map<String, Float> boosts = new HashMap<>();
-        boosts.put("disease_text", 3.0f); // Disease name most important
-        boosts.put("symptoms", 2.0f); // Symptoms very important
-        boosts.put("diagnosis", 1.5f); // Diagnosis important
-        boosts.put("treatment", 1.2f); // Treatment relevant
-        boosts.put("department_text", 1.0f); // Department relevant
+        boosts.put("disease_text", 3.0f); // 疾病名称最重要
+        boosts.put("symptoms", 2.0f);      // 症状非常重要
+        boosts.put("diagnosis", 1.5f);     // 诊断重要
+        boosts.put("treatment", 1.2f);     // 治疗相关
+        boosts.put("department_text", 1.0f); // 科室相关
         boosts.put("causes", 1.0f);
         boosts.put("prevention", 0.8f);
-        boosts.put("content", 0.5f); // General content least weight
+        boosts.put("content", 0.5f);       // 一般内容权重最低
 
         MultiFieldQueryParser parser = new MultiFieldQueryParser(fields, analyzer, boosts);
         parser.setDefaultOperator(QueryParser.Operator.OR);
@@ -366,7 +366,7 @@ public class MedicalKnowledgeBase {
             doc.setId(filename);
             doc.setDiseaseName(diseaseName);
             doc.setDepartment(inferDepartment(diseaseName, content));
-            doc.setContent(null); // avoid keeping large JSON in memory; load on demand
+            doc.setContent(null); // 避免在内存中保存大型JSON；按需加载
 
             documents.put(doc.getId(), doc);
             return doc;
@@ -374,7 +374,7 @@ public class MedicalKnowledgeBase {
     }
 
     private String inferDepartment(String diseaseName, String content) {
-        // Count occurrences of explicit department names in disease name + content
+        // 统计疾病名称和内容中显式提到的科室名称
         String text = (diseaseName == null ? "" : diseaseName) + " " + (content == null ? "" : content);
 
         String[] departments = new String[] {
@@ -438,7 +438,7 @@ public class MedicalKnowledgeBase {
             if (content == null || content.isBlank())
                 return;
             float[] embedding = embedText(buildEmbedText(doc.getDiseaseName(), content));
-            // if (embedding == null) return; // Don't return, allow keyword indexing
+            // if (embedding == null) return; // 不要返回，允许关键词索引
             indexVector(doc, embedding);
         } catch (Exception e) {
             log.warn("Failed to index vector for {}", doc.getId(), e);
@@ -464,28 +464,28 @@ public class MedicalKnowledgeBase {
         float[] normalized = normalize(vector);
         Document luceneDoc = new Document();
 
-        // For exact matching and retrieval
+        // 用于精确匹配和检索
         luceneDoc.add(new StringField("id", doc.getId(), Field.Store.YES));
         luceneDoc.add(new StoredField("diseaseName", doc.getDiseaseName()));
         luceneDoc.add(new StoredField("department", doc.getDepartment()));
 
-        // For keyword search - using TextField for full-text search
+        // 用于关键词搜索 - 使用TextField进行全文搜索
         luceneDoc.add(new TextField("disease_text", doc.getDiseaseName(), Field.Store.NO));
         luceneDoc.add(new TextField("department_text", doc.getDepartment(), Field.Store.NO));
 
-        // Parse content to extract searchable fields
+        // 解析内容以提取可搜索字段
         String content = loadContent(doc.getId(), doc.getContent());
         if (content != null && !content.isEmpty()) {
             try {
                 JsonNode contentNode = objectMapper.readTree(content);
                 indexJsonFields(luceneDoc, contentNode);
             } catch (Exception e) {
-                // If not JSON, index as plain text
+                // 如果不是JSON，则作为纯文本索引
                 luceneDoc.add(new TextField("content", content, Field.Store.NO));
             }
         }
 
-        // Vector field for semantic search
+        // 用于语义搜索的向量字段
         if (normalized != null) {
             luceneDoc.add(new KnnFloatVectorField("embedding", normalized));
         }
@@ -496,14 +496,14 @@ public class MedicalKnowledgeBase {
     }
 
     private void indexJsonFields(Document luceneDoc, JsonNode node) {
-        // Index common medical fields
+        // 索引常见医疗字段
         indexField(luceneDoc, "symptoms", node, "症状", "主要表现", "临床表现");
         indexField(luceneDoc, "causes", node, "病因", "原因");
         indexField(luceneDoc, "diagnosis", node, "诊断", "鉴别诊断");
         indexField(luceneDoc, "treatment", node, "治疗", "治疗方法", "治疗方案");
         indexField(luceneDoc, "prevention", node, "预防", "预防措施");
 
-        // Index all text content for general search
+        // 为通用搜索索引所有文本内容
         StringBuilder allText = new StringBuilder();
         extractAllText(node, allText);
         if (allText.length() > 0) {
@@ -534,8 +534,8 @@ public class MedicalKnowledgeBase {
 
     private String buildEmbedText(String diseaseName, String content) {
         String raw = diseaseName + "\n" + content;
-        // Keep input under SiliconFlow 8k token limit (Chinese ~1 char/token); trim
-        // aggressively to avoid 413.
+        // 保持输入在SiliconFlow的8k token限制内(中文约1字符/词元)；
+        // 积极裁剪以避免413错误
         int maxChars = 8000;
         if (raw.length() > maxChars) {
             return raw.substring(0, maxChars);
@@ -577,7 +577,7 @@ public class MedicalKnowledgeBase {
 
     private float[] embedText(String text) {
         if (apiKey == null || apiKey.isBlank()) {
-            log.warn("SILICONFLOW_API_KEY not set, skipping embedding");
+            log.warn("未设置SILICONFLOW_API_KEY，跳过向量化");
             return null;
         }
 

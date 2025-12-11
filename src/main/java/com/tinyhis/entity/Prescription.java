@@ -7,7 +7,7 @@ import lombok.Data;
 import java.time.LocalDateTime;
 
 /**
- * Prescription Entity
+ * 处方实体类
  */
 @Data
 @TableName("prescription")
@@ -21,10 +21,10 @@ public class Prescription {
     private Integer quantity;
     private String usageInstruction;
     /**
-     * Status codes:
-     * 0 - pending payment
-     * 1 - paid
-     * 2 - dispensed
+     * 状态码：
+     * 0 - 待支付
+     * 1 - 已支付
+     * 2 - 已发药
      */
     private Integer status;
     private LocalDateTime createTime;

@@ -19,7 +19,7 @@ public class CheckItemServiceImpl implements CheckItemService {
     @Override
     public List<CheckItem> getAllCheckItems() {
         return checkItemMapper.selectList(new LambdaQueryWrapper<CheckItem>()
-                .eq(CheckItem::getStatus, 1) // Only active items
+                .eq(CheckItem::getStatus, 1) // 只包含启用的检查项目
                 .orderByAsc(CheckItem::getCategory)
                 .orderByAsc(CheckItem::getItemId));
     }

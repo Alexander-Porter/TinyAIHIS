@@ -32,8 +32,7 @@ public class DashboardServiceImpl implements DashboardService {
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     private static final String CACHE_KEY = "dashboard:stats";
-    private static final long CACHE_EXPIRE_HOURS = 1;
-
+    private static final long CACHE_EXPIRE_SECONDS = 60;
     @Override
     public Map<String, Object> getDashboardStats() {
         // Try getting from cache
@@ -50,8 +49,8 @@ public class DashboardServiceImpl implements DashboardService {
         // Calculate and cache
         Map<String, Object> stats = calculateStats();
         try {
-            redisTemplate.opsForValue().set(CACHE_KEY, objectMapper.writeValueAsString(stats), CACHE_EXPIRE_HOURS,
-                    TimeUnit.HOURS);
+            redisTemplate.opsForValue().set(CACHE_KEY, objectMapper.writeValueAsString(stats), CACHE_EXPIRE_SECONDS,
+                    TimeUnit.SECONDS);
         } catch (Exception e) {
             log.warn("Failed to write dashboard stats to cache", e);
         }

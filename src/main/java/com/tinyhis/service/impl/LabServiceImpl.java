@@ -24,7 +24,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
- * Lab Service Implementation
+ * 检验服务实现类
  */
 @Service
 @RequiredArgsConstructor
@@ -138,7 +138,7 @@ public class LabServiceImpl implements LabService {
 
         order.setResultText(request.getResultText());
         order.setResultImages(request.getResultImages());
-        order.setStatus(2); // Completed
+        order.setStatus(2); // 已完成
         labOrderMapper.updateById(order);
 
         return order;
@@ -146,7 +146,7 @@ public class LabServiceImpl implements LabService {
 
     @Override
     public List<LabOrder> getOrdersByPatient(Long patientId) {
-        // First get all records for this patient
+        // 首先获取该患者的所有就诊记录
         LambdaQueryWrapper<MedicalRecord> recordWrapper = new LambdaQueryWrapper<>();
         recordWrapper.eq(MedicalRecord::getPatientId, patientId);
         List<MedicalRecord> records = medicalRecordMapper.selectList(recordWrapper);

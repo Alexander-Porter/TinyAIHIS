@@ -1,5 +1,6 @@
 package com.tinyhis.service;
 
+import com.tinyhis.dto.PrescriptionDetailDTO;
 import com.tinyhis.entity.DrugDict;
 import com.tinyhis.entity.Prescription;
 
@@ -28,7 +29,7 @@ public interface PharmacyService {
     /**
      * Get paid prescriptions waiting for dispensing
      */
-    List<Prescription> getPaidPrescriptions();
+    List<PrescriptionDetailDTO> getPaidPrescriptions();
 
     /**
      * Pay for prescription (模拟缴费)

@@ -31,7 +31,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 /**
- * Registration Service Implementation
+ * 挂号服务实现类
  */
 @Service
 @RequiredArgsConstructor
@@ -94,25 +94,15 @@ public class RegistrationServiceImpl implements RegistrationService {
             }
         }
 
-        // --- Redis Seckill Logic ---
+        // Redis 秒杀逻辑
         String quotaKey = quotaPrefix + request.getScheduleId();
         String userKey = userPrefix + request.getScheduleId();
 
-        // 如果 quota 不存在则初始化；如果已存在但小于最新可用量，则刷新为当前可用量
+        // 如果配额不存在则初始化
+        // 注意：不要使用数据库的当前计数覆盖Redis的值，因为数据库更新是异步的，可能滞后
+        // 仅当Redis键不存在时，才从数据库初始化
         int available = schedule.getMaxQuota() - schedule.getCurrentCount();
-        String cached = redisTemplate.opsForValue().get(quotaKey);
-        if (cached == null) {
-            redisTemplate.opsForValue().setIfAbsent(quotaKey, String.valueOf(available), 24, TimeUnit.HOURS);
-        } else {
-            try {
-                int cacheVal = Integer.parseInt(cached);
-                if (cacheVal < available) {
-                    redisTemplate.opsForValue().set(quotaKey, String.valueOf(available), 24, TimeUnit.HOURS);
-                }
-            } catch (NumberFormatException e) {
-                redisTemplate.opsForValue().set(quotaKey, String.valueOf(available), 24, TimeUnit.HOURS);
-            }
-        }
+        redisTemplate.opsForValue().setIfAbsent(quotaKey, String.valueOf(available), 24, TimeUnit.HOURS);
 
         DefaultRedisScript<Long> redisScript = new DefaultRedisScript<>();
         redisScript.setScriptText(LUA_SCRIPT_STOCK);
@@ -133,28 +123,28 @@ public class RegistrationServiceImpl implements RegistrationService {
             }
         }
 
-        // Redis 扣减成功 -> 将请求推入异步队列
+        // Redis扣减成功 -> 将请求推入异步队列
         try {
             String json = objectMapper.writeValueAsString(request);
             redisTemplate.opsForList().leftPush(registrationQueueKey, json);
         } catch (Exception e) {
-            // 是否回滚 Redis？ 理想情况下应回滚，但当前实现仅记录日志并返回错误
+            // 是否回滚Redis？理想情况下应回滚，但当前实现仅记录日志并返回错误
             throw new BusinessException("系统错误: " + e.getMessage());
         }
 
-        // Return a "Pending" registration object to satisfy the controller/frontend
-        // The frontend will see "Success" but the ID might be null or placeholder
+        // 返回一个"待处理"的挂号对象以满足控制器/前端需求
+        // 前端将看到"成功"，但ID可能为null或占位符
         Registration registration = new Registration();
         registration.setPatientId(request.getPatientId());
         registration.setDoctorId(schedule.getDoctorId());
         registration.setScheduleId(request.getScheduleId());
         registration.setStatus(0);
-        registration.setQueueNumber(0); // Unknown yet
+        registration.setQueueNumber(0); // 尚未确定
         registration.setFee(registrationFee);
-        // We return a dummy ID or null. The frontend might need an ID to pay.
-        // This is the trade-off of async.
-        // For this demo, we assume the user goes to "My Registrations" page which will
-        // eventually show the record.
+        // 我们返回一个虚拟ID或null。前端可能需要一个ID来支付。
+        // 这是异步的权衡。
+        // 对于此演示，我们假设用户会访问"我的挂号"页面，
+        // 该页面最终会显示记录。
         return registration;
     }
 
@@ -179,7 +169,7 @@ public class RegistrationServiceImpl implements RegistrationService {
         RegistrationDetailDTO dto = new RegistrationDetailDTO();
         BeanUtils.copyProperties(registration, dto);
 
-        // Fill related info
+        // 填充相关信息
         Schedule schedule = scheduleMapper.selectById(registration.getScheduleId());
         if (schedule != null) {
             dto.setScheduleDate(schedule.getScheduleDate().toString());
@@ -235,7 +225,7 @@ public class RegistrationServiceImpl implements RegistrationService {
                 }
             }
 
-            // Check for pending labs if status is 2 (Waiting/Paused)
+            // 如果状态为2（等待/暂停），检查是否有待处理的检查
             if (reg.getStatus() == 2) {
                 com.tinyhis.entity.MedicalRecord record = medicalRecordMapper.selectOne(
                         new LambdaQueryWrapper<com.tinyhis.entity.MedicalRecord>()
@@ -274,7 +264,7 @@ public class RegistrationServiceImpl implements RegistrationService {
         boolean autoQueue = false;
         if (schedule != null) {
             java.time.LocalDate today = java.time.LocalDate.now();
-            String shift = schedule.getShiftType(); // "AM", "PM" or "ER"
+            String shift = schedule.getShiftType(); // "AM"表示上午，"PM"表示下午，"ER"表示急诊
             java.time.LocalDate scheduleDate = schedule.getScheduleDate();
             java.time.LocalTime nowTime = java.time.LocalTime.now();
             String currentHalf = nowTime.getHour() < 12 ? "AM" : "PM";
@@ -293,9 +283,9 @@ public class RegistrationServiceImpl implements RegistrationService {
         }
 
         if (autoQueue) {
-            registration.setStatus(2); // Paid and already in queue (checked-in equivalent)
+            registration.setStatus(2); // 已支付并已入队（等同于已签到）
         } else {
-            registration.setStatus(1); // Paid, waiting for check-in
+            registration.setStatus(1); // 已支付，等待签到
         }
 
         registrationMapper.updateById(registration);
@@ -349,11 +339,11 @@ public class RegistrationServiceImpl implements RegistrationService {
             }
         }
 
-        // Update status to waiting
-        registration.setStatus(2); // Checked in, waiting
+        // 更新状态为等待中
+        registration.setStatus(2); // 已签到，等待中
         registrationMapper.updateById(registration);
 
-        // Add to queue
+        // 添加到队列
         queueService.addToQueue(registration.getDoctorId(), registration.getRegId());
 
         return registration;
@@ -363,7 +353,7 @@ public class RegistrationServiceImpl implements RegistrationService {
     public List<Registration> getWaitingQueue(Long doctorId) {
         LambdaQueryWrapper<Registration> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(Registration::getDoctorId, doctorId)
-                .eq(Registration::getStatus, 2) // Waiting
+                .eq(Registration::getStatus, 2) // 等待中
                 .orderByAsc(Registration::getQueueNumber);
         return registrationMapper.selectList(wrapper);
     }
@@ -403,12 +393,12 @@ public class RegistrationServiceImpl implements RegistrationService {
     @Override
     @Transactional
     public Registration callNext(Long doctorId) {
-        // Get next from queue
+        // 从队列中获取下一个
         Long regId = queueService.getNextFromQueue(doctorId);
         boolean fromQueue = regId != null;
 
         if (regId == null) {
-            // Fallback to database query - 包含急诊状态1的患者, 不包含状态6(暂停)
+            // 回退到数据库查询 - 包含急诊状态1的患者, 不包含状态6(暂停)
             List<Registration> waiting = getCallablePatients(doctorId);
             if (waiting.isEmpty()) {
                 throw new BusinessException("当前没有等待的患者");
@@ -430,8 +420,8 @@ public class RegistrationServiceImpl implements RegistrationService {
             throw new BusinessException("该患者不属于当前医生");
         }
 
-        // Allow calling from Status 1 (Paid/ER), 2 (Waiting), 6 (Paused)
-        // If already 3, just return
+        // 允许从状态1（已支付/急诊）、2（等待中）、6（已暂停）调用
+        // 如果已经是状态3，直接返回
         if (registration.getStatus() == 3) {
             return registration;
         }
@@ -440,31 +430,30 @@ public class RegistrationServiceImpl implements RegistrationService {
             throw new BusinessException("当前状态无法叫号");
         }
 
-        // Check if there is already a patient in consultation for this doctor
-        // Optionally auto-pause the current one?
-        // User didn't strictly request auto-pause, but "call specific" usually implies
-        // taking over.
-        // Let's just set this one to 3. If there's another 3, we depend on frontend to
-        // pause it or backend to handle logic?
-        // Typically only one patient status 3 per doctor.
-        // Let's simplisticly allow multiple 3s or just proceed.
-        // Better: Find current status 3 and set to 6 (Paused)?
-        // User requirement: "Prevent paused patients from ... re-entering".
-        // Let's just activate this one.
+        // 检查该医生是否已有患者正在就诊
+        // 可选地自动暂停当前患者？
+        // 用户没有严格请求自动暂停，但"指定叫号"通常意味着接管
+        // 简单起见，我们直接将状态设为3（就诊中）。如果已有状态3的患者，
+        // 由前端处理或后端逻辑处理？
+        // 通常每个医生只有一个状态3的患者。
+        // 简单实现：允许多个状态3或继续执行。
+        // 更好的做法：查找当前状态3的患者并将其设为6（已暂停）？
+        // 用户要求："防止暂停的患者重新进入"
+        // 直接激活当前患者
 
-        return activateRegistration(doctorId, regId, true); // Treat as fromQueue to ensure removal
+return activateRegistration(doctorId, regId, true); // 视为来自队列以确保移除
     }
 
     private Registration activateRegistration(Long doctorId, Long regId, boolean removeFromQueue) {
         Registration registration = registrationMapper.selectById(regId);
         if (registration != null) {
-            registration.setStatus(3); // In consultation
+            registration.setStatus(3); // 就诊中
             registrationMapper.updateById(registration);
 
-            // Remove from queue (if it was there)
+            // 从队列中移除（如果存在）
             queueService.removeFromQueue(doctorId, regId);
 
-            // Broadcast update
+            // 广播更新
             SysUser doctor = sysUserMapper.selectById(doctorId);
             if (doctor != null && doctor.getDeptId() != null) {
                 queueService.broadcastQueueUpdate(doctor.getDeptId());
@@ -481,7 +470,7 @@ public class RegistrationServiceImpl implements RegistrationService {
             throw new BusinessException("挂号记录不存在");
         }
 
-        registration.setStatus(4); // Completed
+        registration.setStatus(4); // 已完成
         registrationMapper.updateById(registration);
         return registration;
     }
@@ -498,10 +487,10 @@ public class RegistrationServiceImpl implements RegistrationService {
             throw new BusinessException("就诊中或已完成的挂号无法取消");
         }
 
-        registration.setStatus(5); // Cancelled
+        registration.setStatus(5); // 已取消
         registrationMapper.updateById(registration);
 
-        // Release quota
+        // 释放号源
         scheduleService.decrementCount(registration.getScheduleId());
 
         return true;

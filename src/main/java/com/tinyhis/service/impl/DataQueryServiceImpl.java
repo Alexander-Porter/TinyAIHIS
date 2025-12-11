@@ -64,7 +64,7 @@ public class DataQueryServiceImpl implements DataQueryService {
 
     private Map<String, Object> queryRegistrations(int page, int size, LocalDate startDate, LocalDate endDate,
             Long deptId, Long doctorId, Integer status) {
-        // First get schedule IDs that match the date range
+        // 首先获取符合日期范围的排班ID
         Set<Long> scheduleIds = null;
         Map<Long, Schedule> scheduleMap = new HashMap<>();
 
@@ -86,7 +86,7 @@ public class DataQueryServiceImpl implements DataQueryService {
             return Map.of("list", List.of(), "total", 0, "aggregation", Map.of());
         }
 
-        // Query registrations
+        // 查询挂号记录
         LambdaQueryWrapper<Registration> wrapper = new LambdaQueryWrapper<>();
         if (scheduleIds != null && !scheduleIds.isEmpty()) {
             wrapper.in(Registration::getScheduleId, scheduleIds);
@@ -97,7 +97,7 @@ public class DataQueryServiceImpl implements DataQueryService {
 
         Page<Registration> pageResult = registrationMapper.selectPage(new Page<>(page, size), wrapper);
 
-        // Get related data
+        // 获取相关数据
         Set<Long> patientIds = pageResult.getRecords().stream().map(Registration::getPatientId)
                 .collect(Collectors.toSet());
         Set<Long> doctorIds = pageResult.getRecords().stream().map(Registration::getDoctorId)
@@ -132,7 +132,7 @@ public class DataQueryServiceImpl implements DataQueryService {
     private Map<String, Object> queryPrescriptions(int page, int size, LocalDate startDate, LocalDate endDate,
             Long deptId, Long doctorId, Long drugId, Integer status, boolean excludeChief) {
 
-        // Get medical records in date range
+        // 获取日期范围内的病历记录
         LambdaQueryWrapper<MedicalRecord> recordWrapper = new LambdaQueryWrapper<>();
         if (startDate != null)
             recordWrapper.ge(MedicalRecord::getCreateTime, startDate.atStartOfDay());
@@ -150,7 +150,7 @@ public class DataQueryServiceImpl implements DataQueryService {
             return Map.of("list", List.of(), "total", 0, "aggregation", Map.of("totalAmount", 0.0));
         }
 
-        // Filter by department and exclude chief if needed
+        // 按科室过滤，如果需要则排除主任医师
         Map<Long, SysUser> doctorMap = getDoctorMapAll();
         if (deptId != null || excludeChief) {
             final Set<Long> filteredDoctorIds = doctorMap.values().stream()
@@ -169,7 +169,7 @@ public class DataQueryServiceImpl implements DataQueryService {
             return Map.of("list", List.of(), "total", 0, "aggregation", Map.of("totalAmount", 0.0));
         }
 
-        // Query prescriptions
+        // 查询处方
         LambdaQueryWrapper<Prescription> wrapper = new LambdaQueryWrapper<>();
         wrapper.in(Prescription::getRecordId, recordIds);
         if (drugId != null)
@@ -180,13 +180,13 @@ public class DataQueryServiceImpl implements DataQueryService {
 
         Page<Prescription> pageResult = prescriptionMapper.selectPage(new Page<>(page, size), wrapper);
 
-        // Get drug info
+        // 获取药品信息
         Map<Long, DrugDict> drugMap = getDrugMap();
         Map<Long, String> patientNames = getPatientNames(
                 records.stream().map(MedicalRecord::getPatientId).collect(Collectors.toSet()));
         Map<Long, String> deptNames = getDeptNames();
 
-        // Calculate total amount
+        // 计算总金额
         double totalAmount = 0.0;
         for (Prescription p : pageResult.getRecords()) {
             DrugDict drug = drugMap.get(p.getDrugId());
@@ -452,7 +452,7 @@ public class DataQueryServiceImpl implements DataQueryService {
             String role, Long drugId, Integer status, String keyword, boolean excludeChief,
             HttpServletResponse response) {
 
-        // Query all data (no pagination)
+        // 查询所有数据（不分页）
         Map<String, Object> result = queryData(type, 1, 10000, startDate, endDate, deptId, doctorId, role, drugId,
                 status, keyword, excludeChief);
         List<Map<String, Object>> list = (List<Map<String, Object>>) result.get("list");
@@ -461,14 +461,14 @@ public class DataQueryServiceImpl implements DataQueryService {
             Sheet sheet = workbook.createSheet("Data");
 
             if (!list.isEmpty()) {
-                // Header row
+                // 表头行
                 Row headerRow = sheet.createRow(0);
                 List<String> headers = new ArrayList<>(list.get(0).keySet());
                 for (int i = 0; i < headers.size(); i++) {
                     headerRow.createCell(i).setCellValue(headers.get(i));
                 }
 
-                // Data rows
+                // 数据行
                 for (int i = 0; i < list.size(); i++) {
                     Row row = sheet.createRow(i + 1);
                     Map<String, Object> item = list.get(i);
@@ -494,12 +494,12 @@ public class DataQueryServiceImpl implements DataQueryService {
         LocalDateTime todayStart = today.atStartOfDay();
         LocalDateTime todayEnd = today.plusDays(1).atStartOfDay();
 
-        // Today's registrations
+        // 今日挂号数
         LambdaQueryWrapper<Registration> regWrapper = new LambdaQueryWrapper<>();
         regWrapper.ge(Registration::getCreateTime, todayStart).lt(Registration::getCreateTime, todayEnd);
         long todayRegistrations = registrationMapper.selectCount(regWrapper);
 
-        // Total doctors
+        // 医生总数
         LambdaQueryWrapper<SysUser> doctorWrapper = new LambdaQueryWrapper<>();
         doctorWrapper.in(SysUser::getRole, "DOCTOR", "CHIEF");
         long doctors = sysUserMapper.selectCount(doctorWrapper);
@@ -521,7 +521,7 @@ public class DataQueryServiceImpl implements DataQueryService {
                 "todayLabOrders", todayLabOrders);
     }
 
-    // Helper methods
+    // 辅助方法
     private Map<Long, String> getPatientNames(Set<Long> patientIds) {
         if (patientIds == null || patientIds.isEmpty())
             return Map.of();

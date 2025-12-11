@@ -8,27 +8,27 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import java.util.List;
 
 /**
- * AI Triage Service Interface
+ * AI分诊服务接口
  */
 public interface TriageService {
 
     /**
-     * Perform AI-based triage based on body part and symptoms
+     * 基于身体部位和症状执行AI分诊
      */
     TriageResult triage(TriageRequest request);
 
     /**
-     * Stream AI-based triage
+     * 流式AI分诊
      */
     void streamTriage(TriageRequest request, SseEmitter emitter);
 
     /**
-     * Stream Doctor Assistant
+     * 流式医生助手
      */
     void streamDoctorAssist(Long patientId, String userQuery, String conversationId, SseEmitter emitter);
     
     /**
-     * Search knowledge base
+     * 搜索知识库
      */
     List<MedicalDocument> searchKnowledge(String query, int limit);
 }

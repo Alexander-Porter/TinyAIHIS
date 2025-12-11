@@ -44,7 +44,7 @@ public class QueueServiceImpl implements QueueService {
             queue.add(regId);
         }
         
-        // Get department and broadcast
+        // 获取科室并广播
         SysUser doctor = sysUserMapper.selectById(doctorId);
         if (doctor != null && doctor.getDeptId() != null) {
             broadcastQueueUpdate(doctor.getDeptId());
@@ -58,7 +58,7 @@ public class QueueServiceImpl implements QueueService {
             queue.remove(regId);
         }
         
-        // Get department and broadcast
+        // 获取科室并广播
         SysUser doctor = sysUserMapper.selectById(doctorId);
         if (doctor != null && doctor.getDeptId() != null) {
             broadcastQueueUpdate(doctor.getDeptId());
@@ -84,7 +84,7 @@ public class QueueServiceImpl implements QueueService {
             info.setDeptName(dept.getDeptName());
         }
 
-        // Get doctors in this department
+        // 获取该科室的医生
         LambdaQueryWrapper<SysUser> doctorWrapper = new LambdaQueryWrapper<>();
         doctorWrapper.eq(SysUser::getDeptId, deptId)
                      .in(SysUser::getRole, "DOCTOR", "CHIEF");
@@ -130,7 +130,7 @@ public class QueueServiceImpl implements QueueService {
                 if (schedule != null) {
                     Long roomId = schedule.getRoomId();
                     
-                    // Fallback to template if roomId is null
+                    // 如果roomId为null，则回退到模板
                     if (roomId == null) {
                         try {
                             int dayIndex = schedule.getScheduleDate().getDayOfWeek().getValue() - 1; // Monday=1 -> 0
@@ -138,7 +138,7 @@ public class QueueServiceImpl implements QueueService {
                             templateWrapper.eq(ScheduleTemplate::getDoctorId, schedule.getDoctorId())
                                           .eq(ScheduleTemplate::getShiftType, schedule.getShiftType())
                                           .eq(ScheduleTemplate::getDayOfWeek, dayIndex)
-                                          .last("LIMIT 1"); // Ensure single result
+                                          .last("LIMIT 1"); // 确保只返回一条结果
                             ScheduleTemplate template = scheduleTemplateMapper.selectOne(templateWrapper);
                             if (template != null) {
                                 roomId = template.getRoomId();

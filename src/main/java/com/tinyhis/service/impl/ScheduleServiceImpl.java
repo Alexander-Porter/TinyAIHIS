@@ -79,7 +79,7 @@ public class ScheduleServiceImpl implements ScheduleService {
 
     @Override
     public List<ScheduleDTO> getScheduleList(Long deptId, LocalDate startDate, LocalDate endDate) {
-        // Get all doctors in department
+        // 获取部门下所有医生
         List<SysUser> doctors = getDoctorsByDept(deptId);
         if (doctors.isEmpty()) {
             return new ArrayList<>();
@@ -98,7 +98,7 @@ public class ScheduleServiceImpl implements ScheduleService {
         List<Schedule> schedules = scheduleMapper.selectList(wrapper);
         Department dept = getDepartmentById(deptId);
         
-        // Load all consulting rooms for mapping
+        // 加载所有诊室信息用于映射
         Map<Long, ConsultingRoom> roomMap = consultingRoomMapper.selectList(null)
                 .stream()
                 .collect(Collectors.toMap(ConsultingRoom::getRoomId, r -> r));
@@ -121,7 +121,7 @@ public class ScheduleServiceImpl implements ScheduleService {
             dto.setDeptId(deptId);
             dto.setDeptName(dept != null ? dept.getDeptName() : null);
             
-            // Set room info
+            // 设置诊室信息
             dto.setRoomId(s.getRoomId());
             if (s.getRoomId() != null && roomMap.containsKey(s.getRoomId())) {
                 ConsultingRoom room = roomMap.get(s.getRoomId());
@@ -147,7 +147,7 @@ public class ScheduleServiceImpl implements ScheduleService {
             }
             dto.setExpired(expired);
             
-            // Find doctor name
+            // 查找医生姓名
             doctors.stream()
                    .filter(d -> d.getUserId().equals(s.getDoctorId()))
                    .findFirst()
@@ -167,7 +167,7 @@ public class ScheduleServiceImpl implements ScheduleService {
     @Override
     public Schedule saveSchedule(Schedule schedule) {
         if (schedule.getScheduleId() == null) {
-            schedule.setVersion(0);  // Initialize version for new schedule
+            schedule.setVersion(0);  // 为新排班初始化版本号
             scheduleMapper.insert(schedule);
         } else {
             scheduleMapper.updateById(schedule);
@@ -186,16 +186,16 @@ public class ScheduleServiceImpl implements ScheduleService {
     }
 
     /**
-     * Increment appointment count with optimistic locking for flash sale protection.
+     * 使用乐观锁增加预约计数，防止超卖。
      * 
-     * This method implements a retry mechanism:
-     * 1. Read current schedule with version
-     * 2. Check if quota is available
-     * 3. Update with version check (CAS operation)
-     * 4. If update fails (version mismatch), retry up to MAX_RETRY_TIMES
+     * 此方法实现了重试机制：
+     * 1. 使用版本号读取当前排班
+     * 2. 检查号源是否可用
+     * 3. 使用版本检查进行更新（CAS操作）
+     * 4. 如果更新失败（版本不匹配），最多重试MAX_RETRY_TIMES次
      * 
-     * @param scheduleId the schedule ID to increment
-     * @return true if successfully incremented, false if quota exhausted or failed
+     * @param scheduleId 要增加计数的排班ID
+     * @return 如果成功增加返回true，如果号源已用完或失败返回false
      */
     @Override
     @Transactional
@@ -207,14 +207,14 @@ public class ScheduleServiceImpl implements ScheduleService {
                 return false;
             }
             
-            // Check quota availability
+            // 检查号源是否可用
             if (schedule.getCurrentCount() >= schedule.getMaxQuota()) {
                 log.info("Schedule {} quota exhausted: {}/{}", 
                     scheduleId, schedule.getCurrentCount(), schedule.getMaxQuota());
                 return false;
             }
             
-            // Optimistic lock update - MyBatis-Plus will automatically check version
+            // 乐观锁更新 - MyBatis-Plus会自动检查版本
             int newCount = schedule.getCurrentCount() + 1;
             schedule.setCurrentCount(newCount);
             int rows = scheduleMapper.updateById(schedule);
@@ -225,10 +225,10 @@ public class ScheduleServiceImpl implements ScheduleService {
                 return true;
             }
             
-            // Version conflict, retry
+            // 版本冲突，重试
             log.debug("Optimistic lock conflict for schedule {}, retry {}", scheduleId, i + 1);
             try {
-                // Random backoff to reduce collision
+                // 随机退避以减少冲突
                 Thread.sleep(java.util.concurrent.ThreadLocalRandom.current().nextInt(5, 20));
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
@@ -241,8 +241,8 @@ public class ScheduleServiceImpl implements ScheduleService {
     }
     
     /**
-     * Decrement appointment count (for cancellation).
-     * Also uses optimistic locking to ensure consistency.
+     * 减少预约计数（用于取消预约）。
+     * 同样使用乐观锁确保一致性。
      */
     @Override
     @Transactional

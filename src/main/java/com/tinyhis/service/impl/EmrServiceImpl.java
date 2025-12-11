@@ -38,7 +38,7 @@ public class EmrServiceImpl implements EmrService {
             throw new BusinessException("挂号记录不存在");
         }
 
-        // Create or update medical record
+        // 创建或更新病历
         MedicalRecord record = getRecordByRegId(request.getRegId());
         if (record == null) {
             record = new MedicalRecord();
@@ -57,7 +57,7 @@ public class EmrServiceImpl implements EmrService {
             medicalRecordMapper.updateById(record);
         }
 
-        // Save prescriptions
+        // 保存处方
         if (request.getPrescriptions() != null && !request.getPrescriptions().isEmpty()) {
             for (EmrRequest.PrescriptionItem item : request.getPrescriptions()) {
                 Prescription prescription = new Prescription();
@@ -65,19 +65,19 @@ public class EmrServiceImpl implements EmrService {
                 prescription.setDrugId(item.getDrugId());
                 prescription.setQuantity(item.getQuantity());
                 prescription.setUsageInstruction(item.getUsageInstruction());
-                prescription.setStatus(0); // Pending payment
+                prescription.setStatus(0); // 待支付
                 prescriptionMapper.insert(prescription);
             }
         }
 
-        // Save lab orders
+        // 保存检查单
         if (request.getLabOrders() != null && !request.getLabOrders().isEmpty()) {
             for (EmrRequest.LabOrderItem item : request.getLabOrders()) {
                 LabOrder labOrder = new LabOrder();
                 labOrder.setRecordId(record.getRecordId());
                 labOrder.setItemName(item.getItemName());
                 labOrder.setPrice(item.getPrice());
-                labOrder.setStatus(0); // Pending payment
+                labOrder.setStatus(0); // 待支付
                 labOrderMapper.insert(labOrder);
             }
         }

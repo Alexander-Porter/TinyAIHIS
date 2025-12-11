@@ -17,7 +17,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * AI Triage Controller
+ * AI分诊控制器
  */
 @RestController
 @RequestMapping("/api/triage")
@@ -30,7 +30,7 @@ public class TriageController {
     private long sseTimeoutMs;
 
     /**
-     * AI-based triage recommendation
+     * 基于AI的分诊推荐
      */
     @PostMapping("/recommend")
     public Result<TriageResult> triage(@RequestBody TriageRequest request) {
@@ -39,21 +39,21 @@ public class TriageController {
     }
 
     /**
-     * Stream AI-based triage recommendation
+     * 流式AI分诊推荐
      */
     @PostMapping(value = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter streamTriage(@RequestBody TriageRequest request) {
-        SseEmitter emitter = new SseEmitter(sseTimeoutMs); // sse timeout
+SseEmitter emitter = new SseEmitter(sseTimeoutMs); // SSE超时时间
         triageService.streamTriage(request, emitter);
         return emitter;
     }
 
     /**
-     * Stream Doctor Assistant
+     * 流式医生助手
      */
     @PostMapping(value = "/doctor-assist", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter streamDoctorAssist(@RequestBody Map<String, Object> request) {
-        SseEmitter emitter = new SseEmitter(sseTimeoutMs); // sse timeout
+SseEmitter emitter = new SseEmitter(sseTimeoutMs); // SSE超时时间
         
         String content = (String) request.get("content");
         String conversationId = (String) request.get("conversationId");
@@ -69,7 +69,7 @@ public class TriageController {
                 try {
                     patientId = Long.parseLong((String) patientIdObj);
                 } catch (NumberFormatException e) {
-                    // ignore
+                    // 忽略格式错误
                 }
             }
         }
@@ -79,7 +79,7 @@ public class TriageController {
     }
     
     /**
-     * Global knowledge search endpoint for doctor workstation
+     * 医生工作站的全局知识库搜索接口
      */
     @PostMapping("/search-knowledge")
     public Result<List<MedicalDocument>> searchKnowledge(@RequestBody @Valid KnowledgeSearchRequest request) {
