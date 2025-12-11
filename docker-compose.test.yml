@@ -7,6 +7,11 @@ services:
       - maven_repo:/root/.m2
     working_dir: /usr/src/app
     command: mvn test -Dspring.profiles.active=test
+    environment:
+      SILICONFLOW_API_KEY: ${SILICONFLOW_API_KEY:-}
+      SILICONFLOW_MODEL: ${SILICONFLOW_MODEL:-deepseek-ai/DeepSeek-V3.2}
+      SILICONFLOW_API_URL: ${SILICONFLOW_API_URL:-https://api.siliconflow.cn/v1}
+      SILICONFLOW_EMBEDDING_URL: ${SILICONFLOW_EMBEDDING_URL:-https://api.siliconflow.cn/v1/embeddings}
     dns:
       - 223.5.5.5
       - 8.8.8.8
