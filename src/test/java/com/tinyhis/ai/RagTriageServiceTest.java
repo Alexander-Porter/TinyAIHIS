@@ -44,26 +44,25 @@ class RagTriageServiceTest {
     void testFallbackTriage() {
         SseEmitter emitter = mock(SseEmitter.class);
 
-        // Test fallback (ragEnabled = false)
+        // 测试回退逻辑（当ragEnabled = false时）
         ragTriageService.streamTriage("咳嗽", null, emitter);
 
-        // Verify that we complete async
-        // Since it's CompletableFuture.runAsync, we need to wait a tiny bit or verify
-        // strictly if we could control executor.
-        // For unit test, simple sleep is easiest or refactor service to return Future.
+        // 验证异步操作是否完成
+        // 由于使用了CompletableFuture.runAsync，需要等待一小段时间
+        // 在单元测试中，简单休眠是最直接的方式，或者可以考虑重构服务以返回Future
         try {
             Thread.sleep(500);
         } catch (InterruptedException e) {
             e.printStackTrace();
         }
 
-        // Verify emitter sent 'message' and 'result'
+        // 验证SSE发射器是否成功发送了'message'和'result'事件
         try {
             verify(emitter, atLeastOnce()).send(any(SseEmitter.SseEventBuilder.class));
-            // In fallback, we set department based on keyword.
-            // "咳嗽" -> 呼吸内科
+            // 在回退逻辑中，系统会根据症状关键词自动匹配科室
+            // 例如："咳嗽" 会自动匹配到呼吸内科
         } catch (Exception e) {
-            fail("SSE send failed");
+            fail("SSE发送失败");
         }
     }
 }
